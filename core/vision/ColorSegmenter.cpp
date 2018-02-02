@@ -333,6 +333,16 @@ cv::Mat ColorSegmenter::extractGrayscaleMat(const ROI& roi) const {
   return roi.mat;
 }
 
+cv::Mat ColorSegmenter::extractGrayscaleMat(const cv::Rect& rect, int xstep, int ystep) const {
+  if (rect.x % xstep || rect.width % xstep) {
+    std::cout << "ERROR in ColorSegmenter::extractGrayscaleMat: provided rect does is not aligned to provided xstep and ystep: " << rect << std::endl;
+  }
+  cv::Mat matLarge = img_grayscale_(rect);
+  cv::Mat matSmall;
+  cv::resize(matLarge, matSmall, cv::Size(), 1.0/xstep, 1.0/ystep, cv::INTER_NEAREST);
+  return matSmall;
+}
+
 bool ColorSegmenter::startHighResScan(Color c, int hStepScale, int vStepScale) {
   std::vector<FocusArea> areas;
   if(!prepareFocusAreas(areas, c)) {
@@ -538,7 +548,8 @@ void ColorSegmenter::constructRuns(const FocusArea& area, int colorFlags) {
       if (runClr != recent && runClr != c && isInFlags(runClr, colorFlags)) {
         if (runClr == c_FIELD_GREEN) {
           vGreenPosition[x] = vStartY[x];
-        } else if (runClr == c_BLUE || runClr == c_PINK ||
+        }
+		if (runClr == c_BLUE || runClr == c_PINK || runClr == c_FIELD_GREEN ||
                    (vGreenPosition[x] != (uint16_t)-1 && runClr == c_WHITE)) {
 
           uint16_t valX = x;
@@ -604,7 +615,8 @@ void ColorSegmenter::constructRuns(const FocusArea& area, int colorFlags) {
     if(!isInFlags(runClr, colorFlags)) continue;
     if (runClr == c_FIELD_GREEN) {
       vGreenPosition[x] = vStartY[x];
-    } else if (runClr == c_BLUE || runClr == c_PINK) {
+    }
+    if (runClr == c_BLUE || runClr == c_PINK || runClr == c_FIELD_GREEN) {
       // Save line segment
       completeVerticalRun(runClr, x, vStartY[x]);
     }

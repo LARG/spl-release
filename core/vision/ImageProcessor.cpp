@@ -196,6 +196,8 @@ void ImageProcessor::processFrame(){
   line_detector_->detectLines(horizon);
   VisionTimer::Stop("ImageProcessor(%s)::lines", camera_);
 
+  field_edge_detector_->detectFieldEdges();
+
   tlog(30, "Detecting goals");
   VisionTimer::Start(30, "ImageProcessor(%s)::goals", camera_);
   hough_detector_->setHorizon(horizon);

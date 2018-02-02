@@ -59,6 +59,7 @@ class ColorSegmenter {
       default: throw std::runtime_error("Invalid extraction source selected.");
     }
   }
+  cv::Mat extractGrayscaleMat(const cv::Rect& rect, int xstep, int ystep) const;
   const cv::Mat& img_grayscale() const { return img_grayscale_; }
   cv::Mat& img_grayscale() { return img_grayscale_; }
 
