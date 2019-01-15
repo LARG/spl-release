@@ -30,6 +30,8 @@ void VisionModule::specifyMemoryDependency() {
   requiresMemoryBlock("game_state");
   providesMemoryBlock("world_objects");
   requiresMemoryBlock("roi");
+  requiresMemoryBlock("behavior");
+  requiresMemoryBlock("team_packets");
 }
 
 void VisionModule::specifyMemoryBlocks() {
@@ -45,6 +47,8 @@ void VisionModule::specifyMemoryBlocks() {
   getOrAddMemoryBlock(cache_.game_state,"game_state");
   getOrAddMemoryBlock(cache_.robot_info,"robot_info");
   getOrAddMemoryBlock(cache_.roi,"roi");
+  getOrAddMemoryBlock(cache_.behavior,"behavior");
+  getOrAddMemoryBlock(cache_.team_packets, "team_packets");
   *top_params_ = cache_.image->top_params_;
   *bottom_params_ = cache_.image->bottom_params_;
 }

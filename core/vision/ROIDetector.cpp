@@ -5,14 +5,14 @@
 
 #define DEBUG_TIMING false
 #define WRITE_INFO_TO_DISK false
-#define HIGHRES_THRESHOLD_SMALL 55  // 45 should definitely be high res 
-#define HIGHRES_THRESHOLD_MEDIUM 75 // 75? 65 should definitely be medium res
+#define HIGHRES_THRESHOLD_SMALL 75  // 45 should definitely be high res 
+#define HIGHRES_THRESHOLD_MEDIUM 95 // 75? 65 should definitely be medium res
 
 using namespace std;
 using namespace cv;
 
-ROIDetector::ROIDetector(DETECTOR_DECLARE_ARGS, ColorSegmenter& segmenter) :
-  DETECTOR_INITIALIZE, color_segmenter_(segmenter) {
+ROIDetector::ROIDetector(DETECTOR_DECLARE_ARGS, ColorSegmenter& segmenter, FieldEdgeDetector& field_edge_detector) :
+  DETECTOR_INITIALIZE, color_segmenter_(segmenter), field_edge_detector_(field_edge_detector) {
 
    xstep_ = 1 << iparams_.defaultHorizontalStepScale;
    ystep_ = 1 << iparams_.defaultVerticalStepScale;
@@ -35,6 +35,16 @@ bool ROIDetector::setImagePointers() {
 }
 
 int ROIDetector::chooseThreshold(int window, int bandIndex) {
+
+  
+  // 85 is a conservative number that works well indoors without creating too many extra roi points or selections
+  // 65 is an aggressive threshold that works well, but produces a lot of ROI points and candidates. Finds more ROIs especially in natural light. 
+  // Sometimes the bottom band (2) on bottom camera can be darker, especially when two robots are together and ball is at the feet. But otherwise it doesn't seem like the threshold should vary by distance... 
+
+  return 65; 
+
+
+ /* 
   if (camera_ == Camera::BOTTOM) {
     if (bandIndex == 2) {  // bottom of image
       return 100;
@@ -42,20 +52,26 @@ int ROIDetector::chooseThreshold(int window, int bandIndex) {
     return 110;
   }
 
-  if (window <= 3) {
+  if (window <= 3) {  // closer to top of image
     return 75;
   }
-  if (window <= 5) {
+  if (window <= 5) {  // closer to middle of image
     return 80;
   }
-  if (window <= 7) {
+  if (window <= 7) {  // closer to bottom of image
     return 90;
   }
 
   return 100;
+*/  
 }
 
 float ROIDetector::chooseWindowFactor(int bandIndex) {
+
+  // TODO: Sanmit
+  // Smaller window sizes seem to be better overall. E.g. using window 7 on bottom seemed to be better... unless there were shadows. Outdoors it did slightly worse. 
+  // Need to see on a robot whether smaller is better for framerate. 
+
   if (camera_ == Camera::TOP) {
     return 1.6;
   }
@@ -69,20 +85,208 @@ float ROIDetector::chooseWindowFactor(int bandIndex) {
   return 2.2;  // bottom of image
 }
 
-std::vector<ROI> ROIDetector::findBallROIs() {
+void ROIDetector::findBallROIs() {
   VisionTimer::Start(60, "ROIDetector(%s)::findBallROIs", camera_);
+
+  points.clear();
+  seams.clear();
+  ballROIs.clear();
+
+  vector<FieldEdgePoint> hullPoints = field_edge_detector_.hullPointCands;
+  
+  int hullCounter = 0;
+  int leftHullIndex = 0;
+  int rightHullIndex = 1272;
+  int hullThreshold = 2;
+
+  if (camera_==Camera::TOP){
+//   printf("Num hull points: %d\n", hullPoints.size());
+     for (int p = 0; p < hullPoints.size(); p++){
+        
+       if (hullPoints[p].valid && !hullPoints[p].below){
+        hullCounter++;
+        if (hullCounter >= hullThreshold){
+          rightHullIndex = hullPoints[p].x;
+          break;
+        }
+       }
+//        printf("Hull point: %d %d\n", hullPoints[p].x, hullPoints[p].hullY);
+//        cout << "Hull point: " << hullPoints[p].x << " " << hullPoints[p].hullY << endl;
+     }
+     hullCounter = 0;
+     for (int p = hullPoints.size()-1; p>= 0; p--){
+       if (hullPoints[p].valid && !hullPoints[p].below){
+        hullCounter++;
+        if (hullCounter >= hullThreshold){
+          leftHullIndex = hullPoints[p].x;
+          break;
+        }
+       }
+     }
+   }
+
+   leftHullIndex = std::max(160, leftHullIndex);
+   rightHullIndex = std::min(1120, rightHullIndex);
+
+//  printf("Left Hull %d Right Hull %d\n", leftHullIndex, rightHullIndex);
+
+
+
+
+  vector<FieldEdgePoint> cvxHullPoints = field_edge_detector_.hullPoints; 
+
+  // Need to evaluate left and right sides of the image outside of (leftHullIndex, rightHullIndex)
+  bool rightEdgeOK = true;
+  bool leftEdgeOK = true;
+  if (camera_==Camera::TOP){
+    
+
+    // First check if there are 5 valid hullpointCands on either side. If there are, then that side is done, and we can keep the detected field edge boundary
+    for (int p = 0; p < 5; p++){
+      if (!hullPoints[p].valid || hullPoints[p].below){
+        rightEdgeOK = false;
+      }
+    }
+    // hullPoints should be greater than size 5
+    for (int p = hullPoints.size()-1; p >= hullPoints.size() - 5; p--){
+      if (!hullPoints[p].valid || hullPoints[p].below){
+        leftEdgeOK = false;
+      }
+    }
+  
+    // If the edge was OK, then it's ok to use the hullY's calculated already for them. 
+    // Otherwise, we need to recompute hullYs by projecting new field edge lines
+   
+    // Need at least 5 cvxHullPoints???
+
+   
+    if (!leftEdgeOK){
+
+      int cvxHPCount = 0;
+      int cvxHPIndex = 0; 
+
+      // Check the number of cvxHullPoints within the leftHullIndex
+      for (int i = 0; i < cvxHullPoints.size(); i++){
+        if (cvxHullPoints[i].x <= leftHullIndex){
+          cvxHPCount++;
+        }
+        else {
+          cvxHPIndex = i;
+          break;
+        }
+        if (cvxHPCount >= 3){
+          cvxHPIndex = i;
+          break;
+        }
+      }
+
+      // If there are 3, use the slope between points 3 & 4 to project points for points before 3
+      if (cvxHPCount >= 3){
+
+        // Another point exists
+        if (cvxHPIndex+1 < cvxHullPoints.size()){
+          LineSegment line(cvxHullPoints[cvxHPIndex], cvxHullPoints[cvxHPIndex+1]);
+          for (int p = hullPoints.size()-1; p >= 0; p--){
+            if (hullPoints[p].x < cvxHullPoints[cvxHPIndex].x){
+              hullPoints[p].hullY = line.getYGivenX(hullPoints[p].x); 
+            }
+            else {
+              break;
+            }
+          }
+          leftEdgeOK = true;
+        }
+      }
+      // Otherwise, find the first cvxHullPoint outside of the region and project a new line between the first and second cvxHullPoints outside the region. Let's be conservative for now and apply it to just the original region points (though maybe we will want to extend it?)
+      else {
+         
+        if (cvxHPIndex+1 < cvxHullPoints.size()){
+          LineSegment line(cvxHullPoints[cvxHPIndex], cvxHullPoints[cvxHPIndex+1]);
+          for (int p = hullPoints.size()-1; p >= 0; p--){
+            if (hullPoints[p].x < leftHullIndex){
+              hullPoints[p].hullY = line.getYGivenX(hullPoints[p].x);
+            }
+            else {
+              break;
+            }
+          }
+          leftEdgeOK = true;
+        }
+      }
+    }
+
+  
+    if (!rightEdgeOK){
+
+      int cvxHPCount = 0;
+      int cvxHPIndex = cvxHullPoints.size()-1; 
+
+      // Check the number of cvxHullPoints within the rightHullIndex
+      for (int i = cvxHullPoints.size()-1; i >= 0; i--){
+        if (cvxHullPoints[i].x >= rightHullIndex){
+          cvxHPCount++;
+        }
+        else {
+          cvxHPIndex = i;
+          break;
+        }
+        if (cvxHPCount >= 3){
+          cvxHPIndex = i;
+          break;
+        }
+      }
+
+      // If there are 3, use the slope between points 3 & 4 to project points for points before 3
+      if (cvxHPCount >= 3){
+
+        // Another point exists
+        if (cvxHPIndex-1 >= 0){
+          LineSegment line(cvxHullPoints[cvxHPIndex-1], cvxHullPoints[cvxHPIndex]);
+          for (int p = 0; p < hullPoints.size(); p++){
+            if (hullPoints[p].x > cvxHullPoints[cvxHPIndex].x){
+              hullPoints[p].hullY = line.getYGivenX(hullPoints[p].x); 
+            }
+            else {
+              break;
+            }
+          }
+          rightEdgeOK = true;
+        }
+      }
+      // Otherwise, find the first cvxHullPoint outside of the region and project a new line between the first and second cvxHullPoints outside the region. Let's be conservative for now and apply it to just the original region points (though maybe we will want to extend it?)
+      else {
+         
+        if (cvxHPIndex-1 >= 0){
+          LineSegment line(cvxHullPoints[cvxHPIndex-1], cvxHullPoints[cvxHPIndex]);
+          for (int p = 0; p < hullPoints.size(); p++){
+            if (hullPoints[p].x > rightHullIndex){
+              hullPoints[p].hullY = line.getYGivenX(hullPoints[p].x);
+            }
+            else {
+              break;
+            }
+          }
+          rightEdgeOK = true;
+        }
+      }
+    }
+  }
+
+
+
+
 
   // if ball was already detected by bottom camera, and we're in top cam, done
   WorldObject &ball = getball();
   if(ball.seen && !ball.fromTopCamera && camera_ == Camera::TOP) {
     tlog(60, "Ball was seen already in the bottom camera, bailing out.");
     VisionTimer::Stop("ROIDetector(%s)::findBallROIs", camera_);
-    return vector<ROI>();
+    return;
   }
 
   // make sure we have an image
   if (!setImagePointers())
-    return vector<ROI>();
+    return;
 
   // create a grayscale cv::Mat of the whole image, subsampled by xstep and ystep
   VisionTimer::Start(60, "ROIDetector(%s)::resizeMat", camera_);
@@ -116,8 +320,6 @@ std::vector<ROI> ROIDetector::findBallROIs() {
   int horizon_offset = 0; // Causes segfaults when horizon below image frame -> (int)(horizon_.getLargestYCoord(mat.cols*xstep_)/xstep_);
   int height = (mat.rows - horizon_offset)/numBands;
   int divisionPadding = std::ceil(0.2*height); // px
-  std::vector<cv::Point> points;
-  seams.clear();
   for(int bandIndex = 0; bandIndex < numBands; ++bandIndex) {
     cv::Rect rect(
       0, // x
@@ -128,16 +330,19 @@ std::vector<ROI> ROIDetector::findBallROIs() {
 
     seams.push_back(rect.y);
 
+/*
     int mid_y = rect.y + rect.height/2;
 
     float blob_size = cmatrix_.getExpectedCameraWidth(mid_x*xstep_, mid_y*ystep_, worldHeight, worldWidth);
     if (camera_ == Camera::BOTTOM) {
       blob_size = 0.1696*blob_size + 14.097;
     } else if (camera_ == Camera::TOP) {
-      blob_size = blob_size;
+      blob_size = 12.02 + 1.025*blob_size;
     }
     blob_size /= xstep_;
 
+
+    // SN: This window code produces too many points. And the clustering algorithm is waaay too slow. 
     float window_factor = chooseWindowFactor(bandIndex);
     int window = blob_size*window_factor;
 
@@ -146,11 +351,29 @@ std::vector<ROI> ROIDetector::findBallROIs() {
     if(window % 2 == 0) {
       window++;
     }
+*/
+
+    // Previous window code produces too many points. This seems to work about as well with much fewer points. 
+    // You need a larger window for outdoors / natural lighting because of the shadows. 
+    int window;
+    if (camera_==Camera::BOTTOM){
+      window = 5;
+    }
+    else{
+      
+      // Using different since something weird going on with ROI point verification below.. but we really want 5 for the top cam...  
+      if (bandIndex == 0){
+        window = 5;
+      }
+      else {
+        window = 3;
+      }
+    }
 
     int threshold = chooseThreshold(window, bandIndex);
 
-    tlog(60, "%s band index %d: window_factor = %f || window = %d ||threshold = %d",
-      Camera::c_str(camera_), bandIndex, window_factor, window, threshold);
+//    tlog(60, "%s band index %d: window_factor = %f || window = %d ||threshold = %d",
+//      Camera::c_str(camera_), bandIndex, window_factor, window, threshold);
 
     // adaptive threshold image with high threshold
     cv::Mat binaryImgPortion;
@@ -160,18 +383,63 @@ std::vector<ROI> ROIDetector::findBallROIs() {
     binaryImgPortion.copyTo(binaryImg(rect));
 #endif
 
+  // TODO: SN - Use Elad's field edge boundary stuff to filter ROI points (i.e. remove points that are off the field, so we will have to cluster fewer points)
+  // This is important because the clustering is very slow (O(n^2)) and quickly becomes too slow after ~70 points (worse case ~3.5ms)
+
+  // TODO: something is not right here. Sometimes pixels that have green below are still allowed to be ROI points... Nevermind it's the padding... adding a hack to ignore padding on top cam top band  
+  // Nevermind, something is still off... 
     // find dark pixels
+    int priorPointSize = points.size();
     for(int row = 0; row < binaryImgPortion.rows; ++row) {
       for(int col = 0; col < binaryImgPortion.cols; ++ col) {
+//        printf("Index into hulls: %d\n", (binaryImgPortion.cols - col -1)); // *xstep_
         if(binaryImgPortion.at<unsigned char>(row, col) < 255
-          && getSegPixelValueAt(col*xstep_, (rect.y + row)*ystep_) != c_FIELD_GREEN) {
+          && getSegPixelValueAt(col*xstep_, (rect.y + row)*ystep_) != c_FIELD_GREEN
+          && ( (camera_ == Camera::TOP && bandIndex == 0 && (rect.y + row) < height - divisionPadding) || 
+          (getSegPixelValueAt(std::max(col-1, 0)*xstep_, (rect.y + row)*ystep_) != c_FIELD_GREEN
+          && getSegPixelValueAt(col*xstep_, (std::max(rect.y + row-1, 0))*ystep_) != c_FIELD_GREEN
+          && getSegPixelValueAt(std::min(col+1, mat.cols-1)*xstep_, (rect.y + row)*ystep_) != c_FIELD_GREEN
+          && getSegPixelValueAt(col*xstep_, (std::min(rect.y + row+1, mat.rows-1))*ystep_) != c_FIELD_GREEN ))
+          ) {
+        
+        // Crude hull point filtering
+        // We always take points on the left and right 12.5% of the image or the second deepest valid hull point from the side, whichever is larger. 
+
+        if ((camera_==Camera::TOP) && (hullPoints[(binaryImgPortion.cols - col - 1)].hullY > (rect.y+row)*ystep_)){
+
+          // Skip this point
+          if (col*xstep_ < leftHullIndex && leftEdgeOK){
+            continue;
+          }
+          if (col*xstep_ > rightHullIndex && rightEdgeOK){
+            continue;
+          }
+          if (col*xstep_ >= leftHullIndex && col*xstep_ <= rightHullIndex){
+            continue;
+          }
+        }
+          
+//        if ((camera_==Camera::TOP) && (col*xstep_ >= std::max(160, leftHullIndex) && col*xstep_ <= std::min(1120, rightHullIndex)) && hullPoints[(binaryImgPortion.cols - col - 1)].hullY > (rect.y+row)*ystep_){
+          // Skip this point
+//          continue;
+//        }
+
           points.push_back(cv::Point(col, rect.y + row));
         }
       }
     }
     tlog(60, "found %i points for threshold window", points.size());
+//    printf("ROI points in band %d : %d\n", bandIndex, points.size()-priorPointSize);
   }
+//
+//  printf("Total ROI points in frame: %d\n", points.size());
+//#ifdef TOOL
+  nROIPoints += points.size();
+//#endif    
+  
   VisionTimer::Stop("ROIDetector(%s)::adaptiveThreshold", camera_);
+
+//  printf("Average ROI points per frame (%s): %f\n", (camera_ == Camera::TOP) ? "top" : "bottom", nROIPoints * 1.0 / frame_counter_);
 
   // cluster pixels
   VisionTimer::Start(60, "ROIDetector(%s)::cluster", camera_);
@@ -186,6 +454,8 @@ std::vector<ROI> ROIDetector::findBallROIs() {
       float ball_size = cmatrix_.getExpectedCameraWidth(x*xstep_, y*ystep_, worldHeight, worldWidth);
       if (camera_ == Camera::BOTTOM) {
         ball_size = -0.0003*std::pow(ball_size, 2) + 0.1762*ball_size + 54.069;
+      } else {
+        ball_size = 12.02 + 1.025*ball_size;
       }
       ball_size /= (xstep_ + ystep_)/2.0;
 
@@ -246,8 +516,9 @@ std::vector<ROI> ROIDetector::findBallROIs() {
   }
 
   // filter out bad ROIs (above horizon)
-  std::vector<ROI> rois;
   tlog(60, "filtering %i ball rois", unfilteredROIs.size());
+  const float greenBelowThresh = 0.5;
+  const float greenInsideThresh = 0.85;
   for(const auto& roi : unfilteredROIs) {
 
     tlog(60, "checking roi: %s", roi);
@@ -257,11 +528,44 @@ std::vector<ROI> ROIDetector::findBallROIs() {
       continue;
     }
 
-    rois.push_back(roi);
-  }
-  tlog(60, "kept %i ball rois", rois.size());
+    // filter out ROI's that don't have green below only for top camera
+    // TODO: we can probably make this box below larger, or be more aggressive with the threshold
+    // This might not be necessary anymore with field edge detection
+    if (camera_ == Camera::TOP){
+      float greenBelowPct = checkGreenBelowPct(roi); 
+      if (greenBelowPct < greenBelowThresh){
+        tlog(60, "throwing out roi %s due to green below %f < %f\n", roi, greenBelowPct, greenBelowThresh);
+        continue;
+      }
+    }
 
-  for(auto& roi : rois) {
+    // filter out ROI's that have too much green inside.  
+    float greenInsidePct = checkGreenInsidePct(roi);
+    if (greenInsidePct > greenInsideThresh){
+        tlog(60, "throwing out roi %s due to green inside %f > %f\n", roi, greenInsidePct, greenInsideThresh);
+        continue;
+    }
+
+
+    // filter out ROIs that are more than 7 meters away (very unlikely we will see anyways, and these tend to give a lot of noise)
+    float roiDist = cmatrix_.groundDistance(cmatrix_.getWorldPosition(roi.centerX(), roi.ymax));
+    if (roiDist > 7000){
+      tlog(60, "throwing out roi %s due to distance %f > 7000", roi, roiDist);
+      continue;
+    }
+
+    ballROIs.push_back(roi);
+  }
+  tlog(60, "kept %i ball rois", ballROIs.size());
+
+//  printf("ROI's found in this frame (%s): %d\n", (camera_==Camera::TOP) ? "top" : "bottom", ballROIs.size());
+
+#ifdef TOOL
+  nROIRegions += ballROIs.size();
+//  printf("Average number ROIs (%s): %f\n", (camera_==Camera::TOP) ? "top" : "bottom", nROIRegions * 1.0 / frame_counter_);
+#endif
+
+  for(auto& roi : ballROIs) {
     // high res scan
     if(camera_ == Camera::TOP && roi.width() < HIGHRES_THRESHOLD_SMALL) {
       roi.setScale(1, 1);
@@ -291,7 +595,7 @@ std::vector<ROI> ROIDetector::findBallROIs() {
 
 #ifdef TOOL
   int pix_count = 0;
-  for(auto& roi : rois) {
+  for(auto& roi : ballROIs) {
     pix_count += (roi.xmax - roi.xmin)*(roi.ymax - roi.ymin)/roi.xstep/roi.ystep;
   }
   pixel_counter_ += pix_count;
@@ -308,8 +612,87 @@ std::vector<ROI> ROIDetector::findBallROIs() {
 
   VisionTimer::Stop("ROIDetector(%s)::findBallROIs", camera_);
 
-  return rois;
 }
+
+float ROIDetector::checkGreenBelowPct(const ROI &roi){
+
+  // We use the default step sizes because the area under the ball shouldn't be high-res scanned
+  int hstep = 1 << iparams_.defaultHorizontalStepScale, vstep = 1 << iparams_.defaultVerticalStepScale;
+
+  int ymin = roi.ymax;
+  int ymax = roi.ymax + (roi.height() / 2);
+  int xmin = roi.xmin;
+  int xmax = roi.xmax;
+  
+  // Make sure indices start on pixels that are classified and within image boundaries
+  ymin -= ymin % vstep;
+  ymax += vstep - ymax % vstep;
+  xmin -= xmin % hstep;
+  xmax += hstep - xmax % hstep;
+
+  xmin = std::max(xmin, 0);
+  xmax = std::min(xmax, iparams_.width - 1);
+  ymin = std::max(ymin, 0);
+  ymax = std::min(ymax, iparams_.height - 1);
+
+  int green = 0, total = 0;
+  for (int x = xmin; x <= xmax; x += hstep){
+    for (int y = ymin; y <= ymax; y += vstep){
+      int c = getSegPixelValueAt(x, y);
+      total++;
+      green += (c == c_FIELD_GREEN);
+    }
+  }
+
+  if(!total && ymin >= iparams_.height){
+    return 1;
+  }
+
+  return ((float)(green)/total);
+
+}
+
+
+// Use this to eliminate ROI's that are mostly just field edges
+float ROIDetector::checkGreenInsidePct(const ROI &roi){
+
+  //
+  int hstep = 1 << iparams_.defaultHorizontalStepScale, vstep = 1 << iparams_.defaultVerticalStepScale;
+
+  int ymin = roi.ymin;
+  int ymax = roi.ymax;
+  int xmin = roi.xmin;
+  int xmax = roi.xmax;
+  
+  // Make sure indices start on pixels that are classified and within image boundaries
+  ymin -= ymin % vstep;
+  ymax += vstep - ymax % vstep;
+  xmin -= xmin % hstep;
+  xmax += hstep - xmax % hstep;
+
+  xmin = std::max(xmin, 0);
+  xmax = std::min(xmax, iparams_.width - 1);
+  ymin = std::max(ymin, 0);
+  ymax = std::min(ymax, iparams_.height - 1);
+
+  int green = 0, total = 0;
+  for (int x = xmin; x <= xmax; x += hstep){
+    for (int y = ymin; y <= ymax; y += vstep){
+      int c = getSegPixelValueAt(x, y);
+      total++;
+      green += (c == c_FIELD_GREEN);
+    }
+  }
+
+  if(!total){
+    return 0;   // Should never happen
+  }
+
+  return ((float)(green)/total);
+
+}
+
+
 
 // make roi bounding boxes larger
 void ROIDetector::padRoisTopCamera(std::vector<ROI>& rois) {
@@ -320,11 +703,20 @@ void ROIDetector::padRoisTopCamera(std::vector<ROI>& rois) {
     int x = (roi.xmin + roi.xmax)/2;
     int y = (roi.ymin + roi.ymax)/2;
     int expectedWidth = cmatrix_.getExpectedCameraWidth(x, y, worldHeight, worldWidth);
+    // std::cout << roi << "\texpectedWidth = " << expectedWidth;
+    expectedWidth = 12.02 + 1.025*expectedWidth;
+    // std::cout << "\tafter = " << expectedWidth << std::endl;
 
     roi.xmin = std::min(roi.xmin, x - expectedWidth/2);
     roi.xmax = std::max(roi.xmax, x + expectedWidth/2);
     roi.ymin = std::min(roi.ymin, y - expectedWidth/2);
-    roi.ymax = std::max(roi.ymax, y + (int)((1.2*expectedWidth)/2));
+    roi.ymax = std::max(roi.ymax, y + expectedWidth/2);
+
+    int height = roi.ymax - roi.ymin;
+    int width = roi.xmax - roi.xmin;
+    roi.ymax += 0.25*height;
+    roi.xmin -= 0.15*width;
+    roi.xmax += 0.15*width;
   }
 }
 

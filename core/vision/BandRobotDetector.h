@@ -1,5 +1,5 @@
-#ifndef ROBOTDETECTOR_H
-#define ROBOTDETECTOR_H
+#ifndef BAND_ROBOTDETECTOR_H
+#define BAND_ROBOTDETECTOR_H
 
 #include <vision/ObjectDetector.h>
 #include <memory/TextLogger.h>

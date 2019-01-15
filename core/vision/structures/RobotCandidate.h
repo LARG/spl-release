@@ -8,9 +8,13 @@
 /// @ingroup vision
 struct RobotCandidate {
 
+  uint16_t xi, xf, yi, yf;
+  uint16_t avgX, avgY;
+  
+  
+  
   // HoughRobotDetector features
   
-  uint16_t xi, xf, yi, yf;
   int numLines;
   bool used;  
   
@@ -31,7 +35,9 @@ struct RobotCandidate {
   Color color;
 
   Position relTorso, relFeet;
+  
   Position relPosition;
+  Position absPosition;
 
   RobotCandidate() : feetMissing(false), blob(NULL), numLines(0), used(false) { }
 

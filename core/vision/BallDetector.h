@@ -4,6 +4,7 @@
 #include <common/Field.h>
 #include <vision/ObjectDetector.h>
 #include <vision/ColorSegmenter.h>
+#include <vision/FieldEdgeDetector.h>
 #include <vision/estimators/BallEstimator.h>
 #include <vision/structures/BallCandidate.h>
 #include <vision/structures/HorizonLine.h>
@@ -11,8 +12,10 @@
 #include <vision/Macros.h>
 #include <math/Point.h>
 #include <common/Profiling.h>
+#include <common/Roles.h>
 #include <vision/BlobDetector.h>
 #include <vision/estimators/MovingBallEstimator.h>
+#include <vision/estimators/PenaltyBallEstimator.h>
 
 class Classifier;
 class ROIDetector;
@@ -141,22 +144,23 @@ class BlobTriangle {
 /// @ingroup vision
 class BallDetector : public ObjectDetector {
  public:
-  BallDetector(DETECTOR_DECLARE_ARGS, const ROIDetector& roi_detector, ColorSegmenter& segmenter, BlobDetector& blob_detector);
+  BallDetector(DETECTOR_DECLARE_ARGS, const ROIDetector& roi_detector, ColorSegmenter& segmenter, BlobDetector& blob_detector, FieldEdgeDetector& field_edge_detector);
   ~BallDetector();
   void init(TextLogger* tl) final;
   void findBall(std::vector<ROI>& rois);
   inline void setHorizon(HorizonLine horizon) { horizon_ = horizon; }
   inline std::vector<BallCandidate> candidates() const { return candidates_; }
   inline BallCandidate* best() const { return best_.get(); }
- 
+  cv::Mat blobDebugImg;
+
  private:
   float getDirectDistanceByBlobWidth(float width, int centerX, int centerY);
   float getDirectDistanceByKinematics(int x, int y);
   float getDirectDistance(BallCandidate& candidate);
   bool setBest(BallCandidate& candidate);
   BlobTriangle blobTests(cv::Mat& mat, const ROI& roi, int xstep, int ystep, bool highres);
-  BlobTriangle blobGeometryTests(std::vector<BlobTriangle>& triangles, const std::vector<BallBlob>& blobs, const ROI& roi, int xstep, int ystep);
-  BlobTriangle blobGeometryTests(BlobTriangle& triangle, const std::vector<BallBlob>& blobs, const ROI& roi, int xstep, int ystep);
+  BlobTriangle blobGeometryTests(std::vector<BlobTriangle>& triangles, const std::vector<BallBlob>& blobs, const std::vector<BallBlob>& badBlobs, const ROI& roi, int xstep, int ystep);
+  BlobTriangle blobGeometryTests(BlobTriangle& triangle, const std::vector<BallBlob>& blobs, const std::vector<BallBlob>& badBlobs, const ROI& roi, int xstep, int ystep);
 
 
   // Moving ball using blobs
@@ -190,6 +194,7 @@ class BallDetector : public ObjectDetector {
   
   // for debugging
   void createBlobImage(cv::Mat& mat, std::vector<BallBlob> goodBlobs, std::vector<BallBlob> badBlobs, std::string filepath);
+  void createBlobImage(const ROI& roi, std::vector<BallBlob> goodBlobs, std::vector<BallBlob> badBlobs);
   void colorBlob(cv::Mat& seg, BallBlob blob, cv::Vec3b color);
 
   float checkBelowGreenPct(BallCandidate &candidate, bool useWhite);
@@ -205,9 +210,11 @@ class BallDetector : public ObjectDetector {
   const ROIDetector& roi_detector_;
   ColorSegmenter& color_segmenter_;
   BlobDetector & blob_detector_;
+  FieldEdgeDetector& field_edge_detector_;
 
   BallEstimator estimator_;
 
   MovingBallEstimator movingball_estimator_;
+  PenaltyBallEstimator penaltyball_estimator_;
   
 };

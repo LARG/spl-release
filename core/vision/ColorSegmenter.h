@@ -115,7 +115,7 @@ class ColorSegmenter {
 
   bool classifyingWholeImage;
 
-  inline bool isBallPixel(uint8_t c){ return (c == c_WHITE || c == c_ROBOT_WHITE || c == c_UNDEFINED); }
+  inline bool isBallPixel(uint8_t c){ return (c == c_WHITE || c == c_ROBOT_WHITE || c == c_UNDEFINED || c == c_BLUE); }
 
   // For excluding parts of the shoulder in the body
   float bodyExclusionSlope[NUM_BODY_EXCL_POINTS];
@@ -129,5 +129,7 @@ class ColorSegmenter {
   bool* pointScanned;
   bool fromLog_;
   bool fillGreenPct_;
+
+  int penaltykeepercounter_ = 0;
 };
 #endif

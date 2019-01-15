@@ -23,27 +23,38 @@
 
 using namespace Eigen;
 
-BallDetector::BallDetector(DETECTOR_DECLARE_ARGS, const ROIDetector& roi_detector, ColorSegmenter& segmenter, BlobDetector& blob_detector) : DETECTOR_INITIALIZE, roi_detector_(roi_detector), color_segmenter_(segmenter), blob_detector_(blob_detector) {
+BallDetector::BallDetector(DETECTOR_DECLARE_ARGS, const ROIDetector& roi_detector, ColorSegmenter& segmenter, BlobDetector& blob_detector, FieldEdgeDetector& field_edge_detector) : DETECTOR_INITIALIZE, roi_detector_(roi_detector), color_segmenter_(segmenter), blob_detector_(blob_detector), field_edge_detector_(field_edge_detector) {
   estimator_.setMean(
     1.0f, // green below percent
     0.0f, // ball green percent
     0.0f, // height
     0.0f, // kw disc
     0.0f, // field dist
-    0.0f // velocity
+    0.0f, // velocity
+    0.5f  // triangle score -- a score of 0.5 is a perfect equilateral triangle. It represents cos(theta) where theta is the largest triangle angle.
   );
 
   // TODO: sanmit
   movingball_estimator_.setMean(
-    0.75f, // ball white pixel %
-    0.3f, // ball undef pixel %
-    1.0f, // ball pixel %
+    0.70f, // ball white pixel %
+    0.2f, // ball undef pixel %
+    0.9f, // ball pixel %
     1.0f, // green below percent
     0.0f, // circle deviation
     0.0f, // height
+    0.0f // kw disc
+//    0.0f, // field dist
+//    0.0f // velocity
+  );
+
+  penaltyball_estimator_.setMean(
+    1.0f, // ball pixel %
+    1.0f, // green below %
+    0.0f, // circle deviation
+    0.0f, // height
     0.0f, // kw disc
-    0.0f, // field dist
-    0.0f // velocity
+    0.0f // field dist
+//    0.0f  // velocity
   );
 }
 
@@ -68,11 +79,17 @@ void BallDetector::findBall(std::vector<ROI>& rois) {
   best_.reset();
   candidates_.clear();
 
+#ifdef TOOL
+  blobDebugImg = cv::Mat(iparams_.height, iparams_.width, CV_8UC3);
+  blobDebugImg.setTo(cv::Scalar(255,255,255));
+#endif
+
   WorldObject &ball = getball();
   // if ball was already detected by bottom camera, and we're in top cam, done
   if(ball.seen && !ball.fromTopCamera && camera_ == Camera::TOP) {
     tlog(70, "Ball was seen already in the bottom camera, bailing out.");
     VisionTimer::Stop("BallDetector(%s)::findBall", camera_);
+    counter_++;     // So that debug_blob images don't overwrite between top and bottom cam
     return;
   }
 
@@ -103,7 +120,8 @@ void BallDetector::findBall(std::vector<ROI>& rois) {
     250.0f, // mean 0.0 height
     0.4f,   // mean 0.0 kw disc
     maxD,   // mean 0.0 field dist
-    maxV    // mean 0.0 velocity
+    maxV,    // mean 0.0 velocity
+    0.175f    // triangle score deviation -- roughly 10 degrees in each std dev. so 60-70 is in first sigma. 
   );
 
   int default_hscale = 3;  // xstep = 8
@@ -116,13 +134,14 @@ void BallDetector::findBall(std::vector<ROI>& rois) {
   for(auto& roi : rois) {
     int xstep = roi.xstep;
     int ystep = roi.ystep;
-    
+   
+    tlog(70, "-----------------------");
     tlog(70, "checking ROI: %s", roi);
     
     roiCounter_++;
 
     // Do high res scan if need be
-    VisionTimer::Start(70, "BallDetector(%s)::highres", camera_);
+//    VisionTimer::Start(70, "BallDetector(%s)::highres", camera_);
     bool highres = false;
     if(camera_ == Camera::TOP && (roi.hscale < default_hscale || roi.vscale < default_vscale)) {
       tlog(70, "Doing high res scan for ball");
@@ -132,19 +151,19 @@ void BallDetector::findBall(std::vector<ROI>& rois) {
       color_segmenter_.classifyImage(focusArea);
       color_segmenter_.setStepScale(default_hscale, default_vscale);
     }
-    VisionTimer::Stop("BallDetector(%s)::highres", camera_);
+//    VisionTimer::Stop("BallDetector(%s)::highres", camera_);
 
-    VisionTimer::Start(70, "BallDetector(%s)::extractMat", camera_);
+//    VisionTimer::Start(70, "BallDetector(%s)::extractMat", camera_);
     cv::Mat mat = color_segmenter_.extractMat(roi);
-    VisionTimer::Stop("BallDetector(%s)::extractMat", camera_);
+//    VisionTimer::Stop("BallDetector(%s)::extractMat", camera_);
     // cv::Mat mat;
     // cv::resize(color_segmenter_.m_img, mat, cv::Size(), 1.0 / xstep, 1.0 / ystep, cv::INTER_NEAREST); 
     
     // apply heuristic tests with blobs
-    VisionTimer::Start(70, "BallDetector(%s)::blobTests", camera_);
+//    VisionTimer::Start(70, "BallDetector(%s)::blobTests", camera_);
     auto triangle = blobTests(mat, roi, xstep, ystep, highres);
     tlog(70, "triangle.score = %f", triangle.score);
-    VisionTimer::Stop("BallDetector(%s)::blobTests", camera_);
+//    VisionTimer::Stop("BallDetector(%s)::blobTests", camera_);
 
     if(triangle.score < 0) continue;
 
@@ -217,17 +236,20 @@ void BallDetector::findBall(std::vector<ROI>& rois) {
       height,
       c.kwDistanceDiscrepancy,
       distanceFromField,
-      c.velocity
+      c.velocity,
+      triangle.score
     );
     //estimator_.printLast();
-    if(prob < 0.3) {
-      tlog(70, "threw out ball candidate because of probability: %2.2f < 0.3", prob);
+    if(prob < 0.4) {  // 0.65
+      tlog(70, "threw out ball candidate because of probability: %2.2f < 0.4", prob);
       continue;
     }
+    c.confidence = prob;
+    c.triangleScore = triangle.score;
     estimator_.logLast(70,textlogger);
 
-    if(triangle.score > curBestScore) {
-      curBestScore = triangle.score;
+    if(prob > curBestScore) {
+      curBestScore = prob; //triangle.score;
       bestCandidateIndex = candidates_.size();
       best = const_cast<ROI*>(&roi);
       best_mat = mat;
@@ -245,6 +267,15 @@ void BallDetector::findBall(std::vector<ROI>& rois) {
 #endif
 
   if(bestCandidateIndex != -1) {
+
+#ifdef TOOL
+    tlog(70, "-----------------------");
+    // Log information about the candidates selected
+    for (int i = 0; i < candidates_.size(); i++){
+      tlog(70, "candidate %d confidence %3.2f triangle_score %3.2f", i, candidates_[i].confidence, candidates_[i].triangleScore);
+    }
+#endif
+
 
     auto& c = candidates_[bestCandidateIndex];
     tlog(70, "setting best candidate to index %i", bestCandidateIndex);
@@ -270,8 +301,11 @@ void BallDetector::findBall(std::vector<ROI>& rois) {
      //TODO: use both top and bottom classifier
     if(classifier_ != nullptr) {
       int diff = getframe() - ball.frameLastSeen;
+#ifdef TOOL
+      diff = 31;    // Force classifier to run on tool so we can see if it works!
+#endif
       if(diff > 30 || c.velocity > 1000) {
-        VisionTimer::Start(70, "BallDetector(%s)::deep classifier", camera_);
+//        VisionTimer::Start(70, "BallDetector(%s)::deep classifier", camera_);
         *best = ROI(
           std::max(0, (int)(c.centerX - c.radius)),
           std::min(iparams_.width-1, (int)(c.centerX + c.radius)),
@@ -285,7 +319,7 @@ void BallDetector::findBall(std::vector<ROI>& rois) {
         cv::resize(best->mat, resized, cv::Size(32, 32));
         best->mat = resized;
         bool result = classifier_->classify(best->mat, prediction);  // extracts features and computes SVM prediction
-        VisionTimer::Stop("BallDetector(%s)::deep classifier", camera_);
+//        VisionTimer::Stop("BallDetector(%s)::deep classifier", camera_);
 #ifdef TOOL
         vblocks_.roi->ball_rois_.push_back(best->clone());
         tlog(70, "classifier outputs: %s", classifier_->predict(best->mat));
@@ -303,10 +337,10 @@ void BallDetector::findBall(std::vector<ROI>& rois) {
       setBest(c);
     }
   }
-  VisionTimer::Start(70, "BallDetector(%s)::findMovingBall()", camera_);
   if (!getball().seen && findMovingBall()){
-    // TODO: For now, just take the first candidate found. But these should be filtered.
-    auto& c = candidates_[0];
+    // TODO: For now, just take the last candidate found. But these should be filtered.
+    // NOTE: The first few elements of the candidates list could possibly contain rejected candidates from the previous ball detector. 
+    auto& c = candidates_[candidates_.size()-1];
     // Don't trust this detector past 4 meters
     if (c.groundDistance <= 4000){
  //     printf("Moving ball\n");
@@ -316,7 +350,6 @@ void BallDetector::findBall(std::vector<ROI>& rois) {
       tlog(75, "Ball too far (%f). Throwing out", c.groundDistance);
     }
   }
-  VisionTimer::Stop("BallDetector(%s)::findMovingBall()", camera_);
   
   counter_++;
   VisionTimer::Stop("BallDetector(%s)::findBall", camera_);
@@ -325,6 +358,7 @@ void BallDetector::findBall(std::vector<ROI>& rois) {
 
 bool BallDetector::findMovingBall() {
 
+  VisionTimer::Start(70, "BallDetector(%s)::findMovingBall()", camera_);
   tlog(75, "Looking for moving balls in %s camera", camera_);
 
   bool foundBall = false;
@@ -392,6 +426,7 @@ bool BallDetector::findMovingBall() {
 
   // Check that inside has some undefined for the pentagons, so that we don't mix up with penalty cross
 
+  VisionTimer::Stop("BallDetector(%s)::findMovingBall()", camera_);
   return foundBall;
 
 }
@@ -505,7 +540,7 @@ BallCandidate* BallDetector::evaluateMovingBallCandidates(std::vector<BallCandid
   Position ballRelPos(getball().relPos.x, getball().relPos.y, 0);
   float ballDistance = cmatrix_.groundDistance(ballRelPos);
   bool ballInitialized = (getball().frameLastSeen > 0);
-  const float confThreshold = .3;
+  const float confThreshold = .25;
   float maxV = 100;
   float maxD = 100;
   // Scale max velocity with expected distance since positional uncertainty increases w/ range
@@ -513,7 +548,8 @@ BallCandidate* BallDetector::evaluateMovingBallCandidates(std::vector<BallCandid
     maxV = std::max(100.0f, ballDistance * .1f);
     maxD = std::max(100.0f, ballDistance * .2f);
   }
-  movingball_estimator_.setStdDev(0.2f, 0.3f, 0.1f, 0.4f, 0.3f, 260.0f, 0.2f, maxD, maxV);
+  movingball_estimator_.setStdDev(0.2f, 0.2f, 0.15f, 0.2f, 0.15f, 260.0f, 0.2f); //, maxD, maxV);
+  penaltyball_estimator_.setStdDev(0.1f, 0.4f, 0.2f, 260.0f, 0.2f, maxD);
   for(uint16_t i = 0; i < candidates.size(); i++) {
     tlog(75, "processing candidate %i", i);
     BallCandidate* candidate = &candidates[i];
@@ -574,20 +610,36 @@ BallCandidate* BallDetector::evaluateMovingBallCandidates(std::vector<BallCandid
     if(!ballInitialized || dt == 0) v = 0;
     if(vblocks_.game_state->state() == TESTING) distanceFromField = 0; // Don't turn this off for SET or PLAYING or the robots will literally explode - JM 06/01/15
 
-    double prob = movingball_estimator_.getLikelihood(
-      whitePct,
-      undefPct,
-      ballPct,
-      belowGreenPct,
-      circleFit,
-      height,
-      candidate->kwDistanceDiscrepancy,
-      distanceFromField,
-      v
-    );
-    //movingball_estimator_.printLast();
+    double prob;
     tlog(75, "Checking candidate %i: %i,%i to %i,%i", i, blob->xi, blob->yi, blob->xf, blob->yf);
-    movingball_estimator_.logLast(75,textlogger);
+    if (vblocks_.game_state->isPenaltyKick && vblocks_.robot_state->role_ == KEEPER){
+      belowGreenPct = camera_ == Camera::TOP ? checkBelowGreenPct(candidates[i], true) : 1.0;
+      prob = penaltyball_estimator_.getLikelihood(
+        ballPct,
+        belowGreenPct,
+        circleFit,
+        height,
+        candidate->kwDistanceDiscrepancy,
+        distanceFromField
+       // v
+      );
+      penaltyball_estimator_.logLast(75,textlogger);
+//      if (prob > 0.15) printf("ball: %f, below %f, circle %f, height %f, kw %f, dist %f, v %f ===== prob %f\n", ballPct, belowGreenPct, circleFit, height, candidate->kwDistanceDiscrepancy, distanceFromField, v, prob);
+    }
+    else{
+      prob= movingball_estimator_.getLikelihood(
+        whitePct,
+        undefPct,
+        ballPct,
+        belowGreenPct,
+        circleFit,
+        height,
+        candidate->kwDistanceDiscrepancy
+//        distanceFromField,
+//        v
+      );
+      movingball_estimator_.logLast(75,textlogger);
+    }
 
 //    if (prob > confThreshold){
 //      printf("BALL CANDIDATE (%f): wp %f up %f bp %f bg %f cf %f h %f kw %f df %f v %f\n", prob, whitePct, undefPct, ballPct, belowGreenPct, circleFit, height, candidate->kwDistanceDiscrepancy, distanceFromField, v);
@@ -628,11 +680,11 @@ BallCandidate* BallDetector::evaluateMovingBallCandidates(std::vector<BallCandid
 void BallDetector::checkColorsInCircleFit(BallCandidate* candidate, float &whitePct, float &undefPct, float &pctBall){
   // check pixels inside circle radius
   // whats the length of one side of the largest square inside the circle
-  float squareWidth = sqrtf((4.0*candidate->radius*candidate->radius)/2.0);
+//  float squareWidth = sqrtf((4.0*candidate->radius*candidate->radius)/2.0);
 
   int hstep, vstep;
   color_segmenter_.getStepSize(hstep,vstep);
-  int roundX = hstep;
+/*  int roundX = hstep;
   int roundY = vstep;
 
   int startX = ((int)((candidate->centerX - squareWidth/2.0)/roundX))*roundX;
@@ -643,26 +695,68 @@ void BallDetector::checkColorsInCircleFit(BallCandidate* candidate, float &white
   if (startY < 0) startY = 0;
   if (endX >= iparams_.width) endX = iparams_.width-1;
   if (endY >= iparams_.height) endY = iparams_.height-1;
+*/  
+  
+  
   int totalPixelsChecked = 0;
   int numBallPix = 0;
+
+  /////
+
+  int ymin = candidate->centerY - candidate->radius;
+  int ymax = candidate->centerY + candidate->radius;
+  int xmin = candidate->centerX - candidate->radius;
+  int xmax = candidate->centerX + candidate->radius;
+  
+  // Make sure indices start on pixels that are classified and within image boundaries
+  ymin -= ymin % vstep;
+  ymax += vstep - ymax % vstep;
+  xmin -= xmin % hstep;
+  xmax += hstep - xmax % hstep;
+
+  xmin = std::max(xmin, 0);
+  xmax = std::min(xmax, iparams_.width - 1);
+  ymin = std::max(ymin, 0);
+  ymax = std::min(ymax, iparams_.height - 1);
+
+  float radiusSquared = candidate->radius * candidate->radius;
+
+
+
+/////
+
+
+
 
   int white = 0;
   int undef = 0;
   int topWhite = 0;
   int bottomWhite = 0;
 
-  for (int x = startX; x < endX; x+=hstep){
-    for (int y = startY; y < endY; y+=vstep){
+  for (int x = xmin; x <= xmax; x+=hstep){
+    
+    float xoff = x - candidate->centerX;
+    xoff *= xoff;
+    
+    for (int y = ymin; y <= ymax; y+=vstep){
+      
+      float yoff = y - candidate->centerY;
+      yoff *= yoff;
+
+      if (xoff + yoff <= radiusSquared){
       totalPixelsChecked++;
       int c = getSegPixelValueAt(x, y);
       // We assume a light source located above. Due to the 3D shape of the ball, the top portion will be brighter than the bottom. On the other hand, lines are flat, so the lighting will be consistent over the entire object. We use robot white as a crude way of identifying shadow regions.
-      if (c == c_WHITE || c == c_ROBOT_WHITE || c == c_UNDEFINED) numBallPix++;
-      if (c == c_WHITE && y < (startY+((endY-startY)/3.0))) topWhite++;
-      if (c == c_ROBOT_WHITE && y >= (startY+((endY-startY)/3.0))) bottomWhite++;
-      if (c == c_UNDEFINED) undef++;
+      if (c == c_WHITE || c == c_ROBOT_WHITE || c == c_UNDEFINED || c == c_BLUE) numBallPix++;
+      
+      if (c == c_WHITE || c == c_ROBOT_WHITE) white++;
+      if (c == c_WHITE && y < (ymin+((ymax-ymin)/3.0))) topWhite++;
+      if (c == c_ROBOT_WHITE && y >= (ymin+((ymax-ymin)/3.0))) bottomWhite++;
+      if (c == c_BLUE) undef++;
+      }
     }
   }
-  white = topWhite + bottomWhite;
+//  white = topWhite + bottomWhite;
   if (totalPixelsChecked == 0) {
     whitePct = 0;
     undefPct = 0;
@@ -670,19 +764,41 @@ void BallDetector::checkColorsInCircleFit(BallCandidate* candidate, float &white
     //return 0;
   }
 
+  // This is all really hacky.
 
-  // Hard constraints. Want at least 10% of each. Otherwise, it could be a line 
-  if ((float)bottomWhite/(2.0 * totalPixelsChecked / 3.0) < 0.1){
-    white = 0;
-    tlog(75, "Not enough gray found on bottom. Found %f. Clearing white pct", (float)bottomWhite/(2.0 * totalPixelsChecked / 3.0));
-  }
-  if ((float)topWhite/(totalPixelsChecked / 3.0) < 0.1){
-    white = 0;
-    tlog(75, "Not enough white found on top. Found %f. Clearing white pct", (float)topWhite/(totalPixelsChecked / 3.0) );
-  }
-
-  whitePct = (float)white/totalPixelsChecked;
   undefPct = (float)undef/totalPixelsChecked;
+//  if (undefPct < 0.05){         // 0.05
+//    tlog(75, "Undef pct was %f < 0.10. Clearing", undefPct);
+//    undefPct = -1.0;               // HACK 
+  
+  // We will let the undef criteria go if the gray criteria is satisfied. Sometimes when the shutter speed is slow and there is not a lot of light, a moving ball will just appear as gray and white.
+
+    tlog(75, "Checking undef in ball: %f", undefPct);
+
+    if (undefPct > 0.05){
+      white = std::max(white, topWhite+bottomWhite);
+    }
+    else {
+    white = topWhite + bottomWhite;
+//    undefPct = 0.15;
+
+      // Hard constraints. Want at least 10% of each. Otherwise, it could be a line 
+      if ((float)bottomWhite/(2.0 * totalPixelsChecked / 3.0) < 0.1){
+        white = 0;
+        tlog(75, "Not enough gray found on bottom. Found %f. Clearing white pct", (float)bottomWhite/(2.0 * totalPixelsChecked / 3.0));
+      }
+      if ((float)topWhite/(totalPixelsChecked / 3.0) < 0.1){
+        white = 0;
+        tlog(75, "Not enough white found on top. Found %f. Clearing white pct", (float)topWhite/(totalPixelsChecked / 3.0) );
+      }
+
+    }
+
+//    undefPct = 0.2;
+
+
+//  }
+  whitePct = (float)white/totalPixelsChecked;
   pctBall = (float)numBallPix / (float)totalPixelsChecked;
  
 
@@ -979,6 +1095,16 @@ float BallDetector::checkBelowGreenPct(BallCandidate &candidate, bool useWhite) 
 
 //  tlog(43, "check from x: %i, %i, and y: %i, %i, hstep: %i, vstep: %i, total: %i, greenwhite: %i, pct: %5.3f orange %i black %i", xmin, xmax, ymin, ymax, hstep, vstep, total, green + white, pct, orange, black);
 
+  // Also check using field edges
+  // TODO: This is a temporary hack. We should really put a function in field edge detector to calculate whether points are above or below. 
+  int projectedX = candidate.centerX - (static_cast<int>(candidate.centerX) % hstep);
+  projectedX = std::max(0, projectedX);
+  int projectedIndex = ((iparams_.width - projectedX)/ hstep) - 1;
+  if (field_edge_detector_.hullPointCands[projectedIndex].hullY < candidate.centerY){
+    pct = 1;
+//    printf("Checking: %f \n", field_edge_detector_.hullPointCands[projectedIndex].x);
+  }
+
   return pct;
 }
 
@@ -1054,12 +1180,12 @@ bool BallDetector::shouldMergeBlobs(BallBlob& b1, BallBlob& b2) {
 }
 
 BlobTriangle BallDetector::blobTests(cv::Mat& mat, const ROI& roi, int xstep, int ystep, bool highres) {  
-  VisionTimer::Start(70, "BallDetector(%s)::computeBlobs", camera_);
+//  VisionTimer::Start(70, "BallDetector(%s)::computeBlobs", camera_);
   std::vector<std::vector<ScanLine>> lines(mat.rows);
   std::vector<BallBlob> blobs = computeBlobs(mat, lines);
-  VisionTimer::Stop("BallDetector(%s)::computeBlobs", camera_);
+//  VisionTimer::Stop("BallDetector(%s)::computeBlobs", camera_);
 
-  VisionTimer::Start(70, "BallDetector(%s)::mergeBlobs", camera_);
+//  VisionTimer::Start(70, "BallDetector(%s)::mergeBlobs", camera_);
   for (int i = 0; i < blobs.size()-1; i++) {
     BallBlob& blob1 = blobs[i];
     for (int j = i + 1; j < blobs.size(); j++) {
@@ -1076,19 +1202,24 @@ BlobTriangle BallDetector::blobTests(cv::Mat& mat, const ROI& roi, int xstep, in
       }
     }
   }
-  VisionTimer::Stop("BallDetector(%s)::merge blobs", camera_);
+//  VisionTimer::Stop("BallDetector(%s)::merge blobs", camera_);
   
-  VisionTimer::Start(70, "BallDetector(%s)::filterBlobs", camera_);
+//  VisionTimer::Start(70, "BallDetector(%s)::filterBlobs", camera_);
   std::vector<BallBlob> badBlobs;
   blobs = filterBlobs(blobs, badBlobs, roi, xstep, ystep, highres);
-  VisionTimer::Stop("BallDetector(%s)::filterBlobs", camera_);
+//  VisionTimer::Stop("BallDetector(%s)::filterBlobs", camera_);
 
+#ifdef TOOL
   if(DEBUG_BLOB) {
-    std::string filepath = util::ssprintf("%s/BlobImages/blobs_%02i_%02i_ball.png", util::env("NAO_HOME"), counter_, roiCounter_);
+    std::string filepath = util::ssprintf("%s/BlobImages/blobs_%02i_%s_%02i_ball.png", util::env("NAO_HOME"), counter_, (camera_ == Camera::TOP) ? "top" : "bottom", roiCounter_);
     cv::imwrite(filepath, mat);
-    filepath = util::ssprintf("%s/BlobImages/blobs_%02i_%02i.png", util::env("NAO_HOME"), counter_, roiCounter_);
+    filepath = util::ssprintf("%s/BlobImages/blobs_%02i_%s_%02i.png", util::env("NAO_HOME"), counter_, (camera_ == Camera::TOP) ? "top" : "bottom", roiCounter_);
     createBlobImage(mat, blobs, badBlobs, filepath);
   }
+  else {
+    createBlobImage(roi, blobs, badBlobs);
+  }
+#endif
 
   // blob count test: need at least three blobs to be a soccer ball
   if(blobs.size() < 3) {
@@ -1103,7 +1234,7 @@ BlobTriangle BallDetector::blobTests(cv::Mat& mat, const ROI& roi, int xstep, in
   if(blobs.size() == 3) {
     auto t = BlobTriangle(blobs[0], blobs[1], blobs[2]);
     //score = blobGeometryTests(blobs, 0, 1, 2, roi, xstep, ystep, centerX, centerY, radius);
-    return blobGeometryTests({t}, blobs, roi, xstep, ystep);
+    return blobGeometryTests({t}, blobs, badBlobs, roi, xstep, ystep);
   }
   else {
     VisionTimer::Wrap(88, "ball triangle subsets");
@@ -1114,7 +1245,7 @@ BlobTriangle BallDetector::blobTests(cv::Mat& mat, const ROI& roi, int xstep, in
     std::vector<BlobTriangle> triangles;
     for(const auto& s : subsets)
       triangles.push_back(BlobTriangle(s[0], s[1], s[2]));
-    auto result = blobGeometryTests(triangles, blobs, roi, xstep, ystep);
+    auto result = blobGeometryTests(triangles, blobs, badBlobs, roi, xstep, ystep);
     VisionTimer::Wrap(88, "ball triangle subsets");
     return result;
   }
@@ -1124,11 +1255,11 @@ BlobTriangle BallDetector::blobTests(cv::Mat& mat, const ROI& roi, int xstep, in
  * Arguments should be sorted in descending order of blob area. (blob1 is largest)
  */
  #define SIGN(x1, y1, x2, y2, x3, y3) (x1 - x3)*(y2 - y3) - (x2 - x3)*(y1 - y3)
-BlobTriangle BallDetector::blobGeometryTests(std::vector<BlobTriangle>& triangles, const std::vector<BallBlob>& blobs, const ROI& roi, int xstep, int ystep) {
+BlobTriangle BallDetector::blobGeometryTests(std::vector<BlobTriangle>& triangles, const std::vector<BallBlob>& blobs, const std::vector<BallBlob>& badBlobs, const ROI& roi, int xstep, int ystep) {
   BlobTriangle bestT;
   for(auto& t : triangles) {
     //VisionTimer::Start(70, "BallDetector(%s)::blobGeometryTests", camera_);
-    blobGeometryTests(t, blobs, roi, xstep, ystep);
+    blobGeometryTests(t, blobs, badBlobs, roi, xstep, ystep);
     //VisionTimer::Stop("BallDetector(%s)::blobGeometryTests", camera_);
     if(t.score > bestT.score) {
       bestT = t;
@@ -1137,7 +1268,7 @@ BlobTriangle BallDetector::blobGeometryTests(std::vector<BlobTriangle>& triangle
   return bestT;
 }
 
-BlobTriangle BallDetector::blobGeometryTests(BlobTriangle& t, const std::vector<BallBlob>& blobs, const ROI& roi, int xstep, int ystep) {
+BlobTriangle BallDetector::blobGeometryTests(BlobTriangle& t, const std::vector<BallBlob>& blobs, const std::vector<BallBlob>& badBlobs, const ROI& roi, int xstep, int ystep) {
   auto &blob1 = t.b1, &blob2 = t.b2, &blob3 = t.b3;
 
   tlog(70, "blob geometry tests for blobs %d %d %d", blob1.id, blob2.id, blob3.id);
@@ -1157,7 +1288,7 @@ BlobTriangle BallDetector::blobGeometryTests(BlobTriangle& t, const std::vector<
   }
 
   // absolute darkness test
-  int darkness_threshold = 115;
+  int darkness_threshold = 100;
   std::vector<int> intensities;
   intensities.push_back(blob1.avgPixelIntensity);
   intensities.push_back(blob2.avgPixelIntensity);
@@ -1191,6 +1322,14 @@ BlobTriangle BallDetector::blobGeometryTests(BlobTriangle& t, const std::vector<
   float a2 = side_lengths_squared[0];  
   float b2 = side_lengths_squared[1];  
   float c2 = side_lengths_squared[2];  // largest side length
+  if(c2 > 3*a2) {
+    tlog(70, "  fail side length test a2, b2, c2 = %.4f, %.4f, %.4f", a2, b2, c2);
+    t.score = -1;
+    return -1;
+  }
+  else {
+    tlog(70, "  pass side length test a2, b2, c2 = %.4f, %.4f, %.4f", a2, b2, c2);
+  }
   float cos_theta = (a2 + b2 - c2)/(2*std::sqrt(a2*b2)); // Law of Cosines
   tlog(70, "  computing cos(t) for blobs at (%i,%i), (%i,%i), (%i,%i)",
     blob1.centroidX*xstep + roi.xmin, blob1.centroidY*ystep + roi.ymin,
@@ -1230,7 +1369,7 @@ BlobTriangle BallDetector::blobGeometryTests(BlobTriangle& t, const std::vector<
     return -1;
   }
   else {
-    tlog(70, "  pass float test: elevation = %2.2f > %2.2f", elevation, elevation_thresh);
+    tlog(70, "  pass float test: elevation = %2.2f >= %2.2f", elevation, -elevation_thresh);
   }
   // put ball below ground -> small radius and large y
   distance = cmatrix_.getWorldDistanceByWidth(2*smaller_radius, ballWidth);
@@ -1256,7 +1395,22 @@ BlobTriangle BallDetector::blobGeometryTests(BlobTriangle& t, const std::vector<
 
     if((b1 == b2) && (b2 == b3)) {
       // centroid of b is inside the triangle formed by centroids of blob1, blob2, blob3.
-      tlog(70, "  fail contains other blob");
+      tlog(70, "  fail contains other (good) blob");
+      t.score = -1;
+      return -1;
+    }
+  }
+  for(auto b : badBlobs) {
+    if(b.id == blob1.id || b.id == blob2.id || b.id == blob3.id) continue;
+
+    // check if blob is inbetween the candidate blobs.
+    bool b1 = SIGN(b.centroidX, b.centroidY, blob1.centroidX, blob1.centroidY, blob2.centroidX, blob2.centroidY) <= 0;
+    bool b2 = SIGN(b.centroidX, b.centroidY, blob2.centroidX, blob2.centroidY, blob3.centroidX, blob3.centroidY) <= 0;
+    bool b3 = SIGN(b.centroidX, b.centroidY, blob3.centroidX, blob3.centroidY, blob1.centroidX, blob1.centroidY) <= 0;
+
+    if((b1 == b2) && (b2 == b3)) {
+      // centroid of b is inside the triangle formed by centroids of blob1, blob2, blob3.
+      tlog(70, "  fail contains other (bad) blob");
       t.score = -1;
       return -1;
     }
@@ -1319,7 +1473,7 @@ void BallDetector::merge(ScanLine& top, ScanLine& bot) {
 
 int BallDetector::greenPixelCount(const BallBlob& blob, const ROI& roi, int xstep, int ystep) {
 
-  VisionTimer::Start(70, "BallDetector(%s)::greenPixelCheck", camera_);
+//  VisionTimer::Start(70, "BallDetector(%s)::greenPixelCheck", camera_);
   // define colors
   int total = 0;
   int numGreen = 0;
@@ -1343,7 +1497,7 @@ int BallDetector::greenPixelCount(const BallBlob& blob, const ROI& roi, int xste
     }
   }
 
-  VisionTimer::Stop("BallDetector(%s)::greenPixelCheck", camera_);
+//  VisionTimer::Stop("BallDetector(%s)::greenPixelCheck", camera_);
   return numGreen;
 }
 
@@ -1364,9 +1518,9 @@ std::vector<BallBlob> BallDetector::filterBlobs(std::vector<BallBlob> blobs, std
 //    }
 
     float sparsity_threshold = 0.4;
-    if(camera_ == Camera::TOP) {
-      sparsity_threshold = 0.5;
-    }
+//    if(camera_ == Camera::TOP) {
+//      sparsity_threshold = 0.5;       // Removing this might be masking the issue that the runs are getting terminated early in some cases
+//    }
     if(blobTooSmall(b, roi)) {
       tlog(70, " failed blobTooSmall.");
       badBlobs.push_back(b);
@@ -1381,10 +1535,10 @@ std::vector<BallBlob> BallDetector::filterBlobs(std::vector<BallBlob> blobs, std
     }
     // blob sholdn't be sparse. Should fill it's bound box by at least 40%
     else if(b.area < sparsity_threshold*b.height*b.width) {
-      tlog(70, "  failed sparsity test. Area %d < (0.4) * %d * %d", b.area, b.height, b.width);
+      tlog(70, "  failed sparsity test. Area %d < (%f) * %d * %d", b.area, sparsity_threshold, b.height, b.width);
       badBlobs.push_back(b);
     }
-    else if(greenPixelCount(b, roi, xstep, ystep)*2 >= b.area) {
+    else if(greenPixelCount(b, roi, xstep, ystep) >= 0.75 * b.area) {     // Ideally we shouldn't be getting a lot of green, but due to light reflecting and noise, it still happens. 
       // tlog(70, "  failed green test. numGreen = %d >= %d", numGreen, b.area/2);
       tlog(70, "  failed greenPixelCount test.");
       badBlobs.push_back(b);
@@ -1427,7 +1581,7 @@ bool BallDetector::blobTooBig(BallBlob& blob, const ROI& roi) {
 bool BallDetector::blobTooSmall(BallBlob& blob, const ROI& roi) {
   int x = blob.centroidX*roi.xstep + roi.xmin;
   int y = blob.centroidY*roi.ystep + roi.ymin;
-  float expectedBlobSize = cmatrix_.getExpectedCameraWidth(x, y, 80.0, 30.0);
+  float expectedBlobSize = cmatrix_.getExpectedCameraWidth(x, y, 80.0, 30.0);     // TODO: look at what the 80 is for... or change the division amount in lowerBound? 
   if (camera_ == Camera::BOTTOM) {
     expectedBlobSize = 0.1696*expectedBlobSize + 14.097;
   }
@@ -1446,19 +1600,19 @@ bool BallDetector::blobTooSmall(BallBlob& blob, const ROI& roi) {
  * Assumes the black pentagons of the ball do not touch the left and right edges of the bounding box.
  * That is, the bouding box contains some padding/margin on the left and right sides of the ball.
  */
-
+// TODO: make sure searching around doesn't go out of bounds? Maybe the number to check behind should depend on roi sampling factor?
 #define DOES_CHANGE_COLOR(mat, row, col, left, right) \
-  left = mat.at<unsigned char>(row, col-1); \
+  left = mat.at<unsigned char>(row, col-2); \
   right = mat.at<unsigned char>(row, col); \
   float percent_diff = std::abs(left - right) / ((left + right) / 2.0f); \
-  bool res = percent_diff > 0.25f; \
+  bool res = percent_diff > 0.30f; \
   if(camera_ == Camera::BOTTOM) { res = percent_diff > 0.20f;}
 
 
 std::vector<BallBlob> BallDetector::computeBlobs(cv::Mat& mat, std::vector<std::vector<ScanLine>>& lines) {
   int window = 1;
   double changeColorTicks = 0;
-  int black_threshold = 150;
+  int black_threshold = 110;
 
   // 1. Compute Scan lines
   for (int row = 0; row < mat.rows; ++row) {
@@ -1468,7 +1622,7 @@ std::vector<BallBlob> BallDetector::computeBlobs(cv::Mat& mat, std::vector<std::
     sl.color = WHITE; // assume the row starts white
     sl.start = 0;
 
-    for (int col = window; col < mat.cols; ++col) {
+    for (int col = 2; col < mat.cols; ++col) {
       int left, right;
       DOES_CHANGE_COLOR(mat, row, col, left, right);
       if(res || (sl.color == DARK && mat.at<unsigned char>(row, col) > black_threshold)) {
@@ -1477,7 +1631,7 @@ std::vector<BallBlob> BallDetector::computeBlobs(cv::Mat& mat, std::vector<std::
           // switching from white to black
           next_color = DARK;
         }
-        if(next_color == sl.color) {
+        if(next_color == sl.color){                    
           // not really a color switch - going from white to even more white, or black to even more black
           continue;
         }
@@ -1561,12 +1715,19 @@ void BallDetector::refineBallLocation(BallCandidate& candidate, const ROI* roi, 
   double maxRadius = candidate.radius/(roi->ystep)*1.2;
   double accumulator_threshold = 3;
 
+  // Rouhan's close ball (smaller version)
+  double high_thresh = cv::threshold(mat, mat.clone(), 0, 255, cv::THRESH_BINARY + cv::THRESH_OTSU);
+  highCanny = high_thresh;
+  /////
+
   cv::HoughCircles(mat, circles, CV_HOUGH_GRADIENT, dp, minDist, highCanny, accumulator_threshold, minRadius, maxRadius);
 
   if(circles.size() == 1) {
 
+    int circlePadding = 5;
+
     Point2D circlePoint(circles[0][0], circles[0][1]);
-    float circleRadius = circles[0][2];
+    float circleRadius = circles[0][2] + circlePadding;   // Add some padding in case blobs are on edge
     int blobContainmentCount = 0;
     if (Point2D(triangle.b1.centroidX, triangle.b1.centroidY).getDistanceTo(circlePoint) < circleRadius) {
       blobContainmentCount++;
@@ -1601,6 +1762,43 @@ void BallDetector::colorBlob(cv::Mat& seg, BallBlob blob, cv::Vec3b color) {
       seg.at<cv::Vec3b>(sl.y, x) = color;
     }
   }
+}
+
+void BallDetector::createBlobImage(
+    const ROI& roi, std::vector<BallBlob> goodBlobs,
+    std::vector<BallBlob> badBlobs) {
+
+
+  cv::Mat mat = roi.mat.clone();
+  cv::cvtColor(mat, mat, CV_GRAY2RGB);
+  mat.setTo(cv::Scalar(255,255,255));
+
+  cv::Vec3b colorBlack(0,0,0);            // unmerged good blob
+  cv::Vec3b colorBlue(91,204,235);        // merged good blob
+  cv::Vec3b colorRed(255,0,0);            // unmerged bad blob
+  cv::Vec3b colorPink(255,74,164);        // merged bad blob
+
+  for(auto& blob : goodBlobs) {
+    if (blob.wasMerged()) {
+      colorBlob(mat, blob, colorBlue);
+    } else {
+      colorBlob(mat, blob, colorBlack);
+    }
+  }
+  for(auto& blob : badBlobs) {
+    if (blob.wasMerged()) {
+      colorBlob(mat, blob, colorPink);
+    } else {
+      colorBlob(mat, blob, colorRed);
+    }
+  }
+
+  // Resize to fit in original image space
+  cv::resize(mat, mat, cv::Size(), roi.xstep, roi.ystep);
+  
+  // Copy into blob debug image
+  mat.copyTo(blobDebugImg(cv::Rect(roi.xmin, roi.ymin, roi.xmax - roi.xmin, roi.ymax - roi.ymin)));
+
 }
 
 void BallDetector::createBlobImage(

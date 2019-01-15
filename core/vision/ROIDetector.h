@@ -3,6 +3,7 @@
 #include <common/Profiling.h>
 #include <memory/TextLogger.h>
 #include <vision/ColorSegmenter.h>
+#include <vision/FieldEdgeDetector.h>
 #include <vision/ObjectDetector.h>
 #include <vision/structures/ROI.h>
 #include <vision/structures/HorizonLine.h>
@@ -31,10 +32,10 @@ struct LineStack {
 /// @ingroup vision
 class ROIDetector : public ObjectDetector {
   public:
-    ROIDetector(DETECTOR_DECLARE_ARGS, ColorSegmenter& segmenter);
+    ROIDetector(DETECTOR_DECLARE_ARGS, ColorSegmenter& segmenter, FieldEdgeDetector& field_edge_detector);
     void init(TextLogger* tl){textlogger = tl;};
     std::vector<ROI> findROIs();
-    std::vector<ROI> findBallROIs();
+    void findBallROIs();
     inline const int xstep() const { return xstep_; }
     inline const int ystep() const { return ystep_; }
     inline const int scale() const { return scale_; }
@@ -44,6 +45,8 @@ class ROIDetector : public ObjectDetector {
      
     cv::Mat binaryImg;
     std::vector<int> seams;
+    std::vector<cv::Point> points;
+    std::vector<ROI> ballROIs;
 
     // Accessors for tool
     vector<vector<ROIRect>> toolBoxMap; 
@@ -54,12 +57,15 @@ class ROIDetector : public ObjectDetector {
     int pixel_counter_ = 0;
     int max_pixel_count_ = 0;
     void drawROIs(std::vector<ROI>& rois, int xstep, int ystep);
+    int nROIPoints = 0;
+    int nROIRegions = 0;
 
   private:
     TextLogger* textlogger;
     HorizonLine horizon_;
     void extractMat(cv::Mat &img) const;
     ColorSegmenter& color_segmenter_;
+    FieldEdgeDetector& field_edge_detector_;
     unsigned char *img_;
     int xstep_, ystep_;  // how to subsample the raw image
     const int scale_ = 16;  // number of pixels (in subsampled image) per box
@@ -77,5 +83,8 @@ class ROIDetector : public ObjectDetector {
   
     void padRoisTopCamera(std::vector<ROI>& rois);
     void padRoisBottomCamera(std::vector<ROI>& rois);
+
+    float checkGreenBelowPct(const ROI &roi);
+    float checkGreenInsidePct(const ROI &roi);
 
 };

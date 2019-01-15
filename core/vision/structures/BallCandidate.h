@@ -17,7 +17,8 @@ struct BallCandidate {
   float confidence;
   float kwDistanceDiscrepancy;
   float velocity;
-  float probability;
+  float probability;        // I don't think this is used anywhere...? We use confidence instead
+  float triangleScore;      // Only for pentagon detector
   Blob* blob;
   Position relPosition;
   Position absPosition;

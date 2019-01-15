@@ -9,27 +9,31 @@
 #include <vision/CrossDetector.h>
 #include <vision/ColorSegmenter.h>
 #include <vision/RamboGoalDetector.h>
+#include <vision/PenaltyKeeperImageProcessor.h>
 #include <common/RobotCalibration.h>
+#include <memory/RobotStateBlock.h>
 #include <iostream>
 
 #define DEBUG_TIMING false
+#define SAVE_IMGS false
+#define DEBUG false
 
 ImageProcessor::ImageProcessor(VisionBlocks& vblocks, const ImageParams& iparams, Camera::Type camera) :
   vblocks_(vblocks), iparams_(iparams), camera_(camera), cmatrix_(iparams_, camera)
 {
   enableCalibration_ = false;
   color_segmenter_ = std::make_unique<ColorSegmenter>(vblocks_, vparams_, iparams_, camera_);
-  roi_detector_ = std::make_unique<ROIDetector>(DETECTOR_PASS_ARGS, *color_segmenter_);
+  field_edge_detector_ = std::make_unique<FieldEdgeDetector>(DETECTOR_PASS_ARGS, *color_segmenter_, *blob_detector_);
+  roi_detector_ = std::make_unique<ROIDetector>(DETECTOR_PASS_ARGS, *color_segmenter_, *field_edge_detector_);
   hough_detector_ = std::make_unique<HoughDetector>(DETECTOR_PASS_ARGS, *color_segmenter_);
   blob_detector_ = std::make_unique<BlobDetector>(DETECTOR_PASS_ARGS, *color_segmenter_);
   line_detector_ = std::make_unique<LineDetector>(DETECTOR_PASS_ARGS, *color_segmenter_, *blob_detector_);
   rambo_goal_detector_ = std::make_unique<RamboGoalDetector>(DETECTOR_PASS_ARGS, *roi_detector_, *color_segmenter_);
-  edge_goal_detector_ = std::make_unique<GoalDetector>(DETECTOR_PASS_ARGS, *color_segmenter_, *blob_detector_, *line_detector_, *hough_detector_); 
-  ball_detector_ = std::make_unique<BallDetector>(DETECTOR_PASS_ARGS, *roi_detector_, *color_segmenter_, *blob_detector_);
-  field_edge_detector_ = std::make_unique<FieldEdgeDetector>(DETECTOR_PASS_ARGS, *color_segmenter_, *blob_detector_);
-  robot_detector_ = std::make_unique<RobotDetector>(DETECTOR_PASS_ARGS, *color_segmenter_, *blob_detector_, *hough_detector_);
+  edge_goal_detector_ = std::make_unique<GoalDetector>(DETECTOR_PASS_ARGS, *color_segmenter_, *blob_detector_, *line_detector_, *hough_detector_, *field_edge_detector_); 
+  ball_detector_ = std::make_unique<BallDetector>(DETECTOR_PASS_ARGS, *roi_detector_, *color_segmenter_, *blob_detector_, *field_edge_detector_);
+  robot_detector_ = std::make_unique<RobotDetector>(DETECTOR_PASS_ARGS, *field_edge_detector_, *color_segmenter_);
   cross_detector_ = std::make_unique<CrossDetector>(DETECTOR_PASS_ARGS, *color_segmenter_, *blob_detector_);
-
+  penalty_keeper_image_processor_ = std::make_unique<PenaltyKeeperImageProcessor>(DETECTOR_PASS_ARGS, *color_segmenter_);
   calibration_ = std::make_unique<RobotCalibration>();
 }
 
@@ -54,6 +58,15 @@ unsigned char* ImageProcessor::getImg() {
   if(camera_ == Camera::TOP)
     return vblocks_.image->getImgTop();
   return vblocks_.image->getImgBottom();
+}
+
+void ImageProcessor::saveImg(std::string filepath) {
+  cv::Mat mat;
+  int xstep_ = 1 << iparams_.defaultHorizontalStepScale;
+  int ystep_ = 1 << iparams_.defaultVerticalStepScale;
+  cv::resize(color_segmenter_->img_grayscale(), mat, cv::Size(), 1.0 / xstep_, 1.0 / ystep_, cv::INTER_NEAREST); 
+  
+  cv::imwrite(filepath, mat);
 }
 
 unsigned char* ImageProcessor::getSegImg(){
@@ -130,11 +143,24 @@ void ImageProcessor::setCalibration(const RobotCalibration& calibration){
 }
 
 void ImageProcessor::processFrame(){
+  if (DEBUG) std::cout << "\nImageProcessor::processFrame: (enter) " << std::endl;
+
   VisionTimer::Start(30, "ImageProcessor(%s)::frame", camera_);
+
+  if(camera_ == Camera::TOP) {
+      topFrameCounter_++;
+  }
+  else {
+      bottomFrameCounter_++;
+  }
+ 
+  if (DEBUG) std::cout << "ImageProcessor::processFrame: a = " << std::endl;
  
   VisionTimer::Start(30, "ImageProcessor(%s)::transforms", camera_);
   if(vblocks_.robot_state->WO_SELF == WO_TEAM_COACH && camera_ == Camera::BOTTOM) return;
   tlog(30, "Process Frame camera %i", camera_);
+
+  if (DEBUG) std::cout << "ImageProcessor::processFrame: b = " << std::endl;
 
   // Horizon calculation
   tlog(30, "Calculating horizon line");
@@ -143,76 +169,133 @@ void ImageProcessor::processFrame(){
   HorizonLine horizon = HorizonLine::generate(iparams_, cmatrix_, 20000);
   vblocks_.robot_vision->horizon = horizon;
 
+  if (DEBUG) std::cout << "ImageProcessor::processFrame: c = " << std::endl;
+
   tlog(30, "Classifying Image");
   color_segmenter_->setHorizon(horizon);
-  
+
+  if (DEBUG) std::cout << "ImageProcessor::processFrame: d = " << std::endl;
+
   VisionTimer::Start(30, "ImageProcessor(%s)::classification", camera_);
   if(!color_segmenter_->classifyImage(color_table_)) {
     VisionTimer::Stop("ImageProcessor(%s)::classification", camera_);
     VisionTimer::Stop("ImageProcessor(%s)::frame", camera_);
     return;
   }
+  
+  if (DEBUG) std::cout << "ImageProcessor::processFrame: e = " << std::endl;
+  
   VisionTimer::Stop("ImageProcessor(%s)::classification", camera_);
   VisionTimer::Start(30, "ImageProcessor(%s)::runs", camera_);
   color_segmenter_->constructRuns();
+  
+  if (DEBUG) std::cout << "ImageProcessor::processFrame: A = " << std::endl;
+  
   VisionTimer::Stop("ImageProcessor(%s)::runs", camera_);
   if(vblocks_.robot_state->WO_SELF == WO_TEAM_COACH) {
     tlog(30, "COACH image: checking for balls in top camera");
     ball_detector_->setHorizon(horizon);
-    auto rois = roi_detector_->findBallROIs();
-    ball_detector_->findBall(rois);
+    roi_detector_->findBallROIs();
+    ball_detector_->findBall(roi_detector_->ballROIs);
     VisionTimer::Stop("ImageProcessor(%s)::frame", camera_);
     return;
   }
+
+  // special-cased vision for penalty shot keeper
+  if (DEBUG) std::cout << "ImageProcessor::processFrame: B = " << std::endl;
+  bool isPenaltyKeeper = vblocks_.game_state->isPenaltyKick && vblocks_.robot_state->WO_SELF == KEEPER;
+  bool doNormalBallDetection = true;
+  if(isPenaltyKeeper) {
+    doNormalBallDetection = penalty_keeper_image_processor_->penaltyKeeperProcessFrame();
+  }
+  if (!doNormalBallDetection) {
+    return;
+  }
+  if (DEBUG) std::cout << "ImageProcessor::processFrame: C" << std::endl;
+
   tlog(30, "Preprocessing line points and forming blobs");
   VisionTimer::Start(30, "ImageProcessor(%s)::preProcess", camera_);
   color_segmenter_->preProcessPoints();
   VisionTimer::Stop("ImageProcessor(%s)::preProcess", camera_);
 
+  if (DEBUG) std::cout << "ImageProcessor::processFrame: D" << std::endl;
+
+  if(SAVE_IMGS) {
+    std::string filepath;
+    if(camera_ == Camera::TOP) {
+      filepath = util::format("%s/log_images/post_distortion/top%02i.png", util::env("NAO_HOME"), topFrameCounter_);
+      saveImg(filepath);
+    }
+    else {
+      filepath = util::format("%s/log_images/post_distortion/bottom%02i.png", util::env("NAO_HOME"), bottomFrameCounter_);
+    }
+  }
+
+  if (DEBUG) std::cout << "ImageProcessor::processFrame: E" << std::endl;
+
+  // Field needs to happen before ball detection, goal detection, and robot detection
+  field_edge_detector_->detectFieldEdges();
+
   tlog(30, "Detecting balls");
   ball_detector_->setHorizon(horizon);
   roi_detector_->setHorizon(horizon);
   VisionTimer::Start(30, "ImageProcessor(%s)::ball_rois", camera_);
-  auto rois = roi_detector_->findBallROIs();
+  if (DEBUG) std::cout << "ImageProcessor::processFrame: F" << std::endl;
+  roi_detector_->findBallROIs();
   VisionTimer::Stop("ImageProcessor(%s)::ball_rois", camera_);
   VisionTimer::Start(30, "ImageProcessor(%s)::balls", camera_);
-  ball_detector_->findBall(rois);
+  if (DEBUG) std::cout << "ImageProcessor::processFrame: G" << std::endl;
+  ball_detector_->findBall(roi_detector_->ballROIs);
   VisionTimer::Stop("ImageProcessor(%s)::balls", camera_);
 
   VisionTimer::Start(30, "ImageProcessor(%s)::blobs", camera_);
+  if (DEBUG) std::cout << "ImageProcessor::processFrame: H" << std::endl;
   blob_detector_->formWhiteLineBlobs();
   VisionTimer::Stop("ImageProcessor(%s)::blobs", camera_);
 
   VisionTimer::Start(30, "ImageProcessor(%s)::lines", camera_);
   tlog(30, "Detecting White Lines");
   
+  if (DEBUG) std::cout << "ImageProcessor::processFrame: I" << std::endl;
   vblocks_.robot_vision->lookForCross = true; // Always enabled for now
   if(camera_ == Camera::TOP && vblocks_.robot_vision->lookForCross) {
     tlog(30, "Detecting crosses");
+    if (DEBUG) std::cout << "ImageProcessor::processFrame: J" << std::endl;
     cross_detector_->detectCrosses();       // SN: this should happen after ball detection, so we don't find crosses on balls (until someone updates the cross detector)
   }
   else tlog(30, "Skipping cross detection");
 
+  if (DEBUG) std::cout << "ImageProcessor::processFrame: K" << std::endl;
   line_detector_->detectLines(horizon);
   VisionTimer::Stop("ImageProcessor(%s)::lines", camera_);
 
-  field_edge_detector_->detectFieldEdges();
+
 
   tlog(30, "Detecting goals");
   VisionTimer::Start(30, "ImageProcessor(%s)::goals", camera_);
+  if (DEBUG) std::cout << "ImageProcessor::processFrame: L" << std::endl;
   hough_detector_->setHorizon(horizon);
   //rambo_goal_detector_->processFrame();
 #ifndef TOOL
-  if (vblocks_.frame_info->frame_id % 3 == 0){
+//  if (vblocks_.frame_info->frame_id % 3 == 0){
 #endif
-  edge_goal_detector_->detectGoalPosts();
+  if (DEBUG) std::cout << "ImageProcessor::processFrame: M" << std::endl;
+    edge_goal_detector_->setHorizon(horizon);
+    edge_goal_detector_->detectWhiteGoal();
+
+//  edge_goal_detector_->detectGoalPosts();
 #ifndef TOOL
-  }
+//  }
 #endif
+
+  robot_detector_->detectRobots();
+
+
   VisionTimer::Stop("ImageProcessor(%s)::goals", camera_);
 
   tlog(21, "Vision frame process complete");
   VisionTimer::Stop("ImageProcessor(%s)::frame", camera_);
+  if (DEBUG) std::cout << "ImageProcessor::processFrame: (return)" << std::endl;
 }
 
 

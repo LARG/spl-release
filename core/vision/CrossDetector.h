@@ -23,6 +23,9 @@ class CrossDetector : public ObjectDetector {
     ColorSegmenter& color_segmenter_;
     BlobDetector& blob_detector_;
 
+
+    float checkGrayBelow(int xmin, int xmax, int ymin, int ymax, int hstep, int vstep);
+
     float getGreenPercentage(int,int,int,int,int,int);
     void correctRanges(int&,int&,int&,int&,int,int);
     float getDistanceByBlobWidth(float width);

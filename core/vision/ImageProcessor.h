@@ -13,6 +13,8 @@
 #include <vision/structures/VisionParams.h>
 #include <vision/GoalDetector.h>
 #include <vision/ROIDetector.h>
+#include <vision/PenaltyKeeperImageProcessor.h>
+#include <vision/RobotDetector.h>
 
 class LineDetector;
 class FieldEdgeDetector;
@@ -26,14 +28,15 @@ class RamboGoalDetector;
 class GoalDetector;
 class HoughRobotDetector;
 class ColorSegmenter;
+class PenaltyKeeperImageProcessor;
 
 /// @ingroup vision
 class ImageProcessor {
   public:
-    
+   
     //typedef JerseyRobotDetector RobotDetector;
    
-    typedef HoughRobotDetector RobotDetector;
+//    typedef HoughRobotDetector RobotDetector;
     
     /*typedef BandRobotDetector RobotDetector;*/
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW  
@@ -53,6 +56,7 @@ class ImageProcessor {
     std::unique_ptr<CrossDetector> cross_detector_;
     std::unique_ptr<ColorSegmenter> color_segmenter_;
     std::unique_ptr<HoughDetector> hough_detector_;
+    std::unique_ptr<PenaltyKeeperImageProcessor> penalty_keeper_image_processor_;
     
     std::unique_ptr<ROIDetector> roi_detector_;
     unsigned char* getImg();
@@ -88,6 +92,10 @@ class ImageProcessor {
     
     std::unique_ptr<RobotCalibration> calibration_;
     bool enableCalibration_;
+
+    void saveImg(std::string filepath);
+    int topFrameCounter_ = 0;
+    int bottomFrameCounter_ = 0;
 };
 
 #endif

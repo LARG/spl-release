@@ -4,7 +4,7 @@
 #include <vision/estimators/LikelihoodEstimator.h>
 
 /// @ingroup vision
-class MovingBallEstimator : public LikelihoodEstimator<9> {
+class MovingBallEstimator : public LikelihoodEstimator<7> {
   public:
     MovingBallEstimator() { setNames(); }
   protected:
@@ -16,9 +16,9 @@ class MovingBallEstimator : public LikelihoodEstimator<9> {
         "g below \%",
         "circ dev",
         "height",
-        "kwdisc",
-        "field dist",
-        "vel"
+        "kwdisc"
+//        "field dist",
+//        "vel"
       };
     }
 };

@@ -8,10 +8,10 @@
 ENUM(Color, 
   c_UNDEFINED,
   c_FIELD_GREEN,
-  c_WHITE,
-  c_ORANGE,
+  c_WHITE,              // Used mainly for lines
+  c_ORANGE,           
   c_PINK,
-  c_BLUE,
+  c_BLUE,               // We are going to change this to mean black
   c_YELLOW,
   c_ROBOT_WHITE
 );

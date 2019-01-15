@@ -4,7 +4,7 @@
 #include <vision/estimators/LikelihoodEstimator.h>
 
 /// @ingroup vision
-class BallEstimator : public LikelihoodEstimator<6> {
+class BallEstimator : public LikelihoodEstimator<7> {
   public:
     BallEstimator() { setNames(); }
   protected:
@@ -15,7 +15,8 @@ class BallEstimator : public LikelihoodEstimator<6> {
         "height",
         "kw disc",
         "field dist",
-        "vel"
+        "vel",
+        "tri score"
       };
     }
 };

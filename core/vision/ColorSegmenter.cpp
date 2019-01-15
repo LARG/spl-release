@@ -1,6 +1,10 @@
 #include <vision/ColorSegmenter.h>
 #include <yuview/YUVImage.h>
 
+#include <fstream>
+#include <iostream>
+#include <common/ColorSpaces.h>
+
 #define SEGMENT_ABOVE_HORIZON true
 
 using namespace cv;
@@ -46,8 +50,6 @@ ColorSegmenter::ColorSegmenter(const VisionBlocks& vblocks, const VisionParams& 
 
  fieldEdgePoints = new int[iparams_.width / (1 << iparams_.defaultHorizontalStepScale)](); 
  fieldEdgeRunLengths = new int[iparams_.width / (1 << iparams_.defaultHorizontalStepScale)]();
-
-
 }
 
 ColorSegmenter::~ColorSegmenter() {
@@ -125,7 +127,9 @@ bool ColorSegmenter::setImagePointers() {
 }
 
 bool ColorSegmenter::classifyImage(unsigned char *colorTable) {
-  if(!setImagePointers()) return false;
+  if(!setImagePointers()) {
+    return false;
+  } 
   clearPreviousHighResScans();
   FocusArea area(0, 0, iparams_.width - 1, iparams_.height - 1);
   
@@ -134,7 +138,7 @@ bool ColorSegmenter::classifyImage(unsigned char *colorTable) {
     fillGreenPct_ = true;
   }
   
-// TODO: SANMIT: This needs to match the sampling rate for the goal detection code
+  // TODO: SANMIT: This needs to match the sampling rate for the goal detection code
   //if (vblocks_.frame_info->frame_id % 3 == 0){
     for (int i = 0; i < iparams_.width / hstep_; i++){
       fieldEdgeRunLengths[i] = 0; 
@@ -183,11 +187,23 @@ void ColorSegmenter::classifyImage(const FocusArea& area, unsigned char* colorTa
     vstep_=1;
   }
 */
+
   colorTable_ = colorTable;
   tlog(28, "Classifying on area %i,%i to %i,%i with horizon %2.f,%2.f and step sizes H %i V %i", area.x1, area.y1, area.x2, area.y2, horizon_.gradient, horizon_.offset, hstep_, vstep_);
   int pixCount = 0;
 
   int id = tic();
+
+
+#ifdef TOOL
+
+//  ofstream greenFile, whiteFile, grayFile, blackFile;
+//  greenFile.open("/home/sanmit/Desktop/histoData/green.txt", ios::out | ios::app);
+//  whiteFile.open("/home/sanmit/Desktop/histoData/white.txt", ios::out | ios::app);
+//  grayFile.open("/home/sanmit/Desktop/histoData/gray.txt", ios::out | ios::app); 
+//  blackFile.open("/home/sanmit/Desktop/histoData/black.txt", ios::out | ios::app);
+
+#endif 
 
   field_edge_points.clear();
   int prev_y = -1;
@@ -208,6 +224,56 @@ void ColorSegmenter::classifyImage(const FocusArea& area, unsigned char* colorTa
         //c = ColorTableMethods::xy2color(img_, colorTable, x, y, iparams_.width);
         c = ColorTableMethods::xy2color(img_, colorTable, x, y, iparams_.width, gray);
         img_grayscale_.at<unsigned char>(y,x) = gray;
+
+
+#ifdef TOOL        
+//        // Save out by color
+//        int yy,uu,vv;
+//        ColorTableMethods::xy2yuv(img_, x, y, iparams_.width, yy, uu, vv);
+//
+//
+//
+//        // Experimental: change c to use some simple thresholds on color histogram
+//        if (uu <= 140 && uu >= 110 && vv <= 140 && vv >= 110){
+//          if (yy >= 150)
+//            c = c_WHITE;
+//          else
+//            c = c_BLUE;
+//        }
+//        else if (uu >= 80 && uu <= 140 && vv >= 70 && vv <= 110 && yy >= 50 && yy <= 175){
+//          c = c_FIELD_GREEN;
+//        }
+//        else {
+//          c = c_UNDEFINED;
+//        }
+//  
+
+
+
+
+
+
+//        RGB rgb = YUV444_TO_RGB(yy, uu, vv);
+//        yy = rgb.r;
+//        uu = rgb.g;
+//        vv = rgb.b;
+//
+//        if (c == c_FIELD_GREEN){
+//          greenFile << yy << "," << uu << "," << vv << "\n";
+//        }
+//        else if (c == c_WHITE){
+//          whiteFile << yy << "," << uu << "," << vv << "\n";
+//        }
+//        else if (c == c_ROBOT_WHITE){
+//          grayFile << yy << "," << uu << "," << vv << "\n";
+//        }
+//        else if (c == c_BLUE){
+//          blackFile << yy << "," << uu << "," << vv << "\n";
+//        }
+
+
+
+#endif
 
 
      /* Everything commented out below here is really slow. I hope it's not necessary! - JM 04/20/2016 */
@@ -283,6 +349,17 @@ void ColorSegmenter::classifyImage(const FocusArea& area, unsigned char* colorTa
       vblocks_.robot_vision->bottomUndefPct /= pixCount;
     }
   }
+
+#ifdef TOOL
+
+//  greenFile.close();
+//  whiteFile.close();
+//  grayFile.close();
+//  blackFile.close();
+
+#endif 
+
+
 }
 
 cv::Mat ColorSegmenter::extractRawMat(const ROI& roi) const {
@@ -422,7 +499,17 @@ void ColorSegmenter::constructRuns(const FocusArea& area, int colorFlags) {
   uint8_t vRunClr[iparams_.width]; // Running line region color
   memset(vRunClr, c_UNDEFINED, sizeof(uint8_t) * iparams_.width);
   uint16_t vStartY[iparams_.width]; // Start of running line region
-  memset(vRunClr, -1, sizeof(uint16_t) * iparams_.width);
+  memset(vStartY, -1, sizeof(uint16_t) * iparams_.width);
+
+
+  uint8_t vLastRunClr[iparams_.width];  // Previous running line region color
+  memset(vLastRunClr, c_UNDEFINED, sizeof(uint8_t) * iparams_.width);
+
+
+  VisionPoint *prevVPointArray[iparams_.width];    // Pointer to previous run point
+  for (int i = 0; i < iparams_.width; i++){
+    prevVPointArray[i] = NULL;
+  }
 
   for (y = area.y1; y <= area.y2; y += vstep_) {
     if(!SEGMENT_ABOVE_HORIZON) {
@@ -434,6 +521,9 @@ void ColorSegmenter::constructRuns(const FocusArea& area, int colorFlags) {
     uint8_t hRecent = c_UNDEFINED;
     uint8_t hRunClr = c_UNDEFINED;
     uint16_t hStartX = 0;
+
+    VisionPoint *prevHPoint = NULL;
+    uint8_t hLastClr = c_UNDEFINED;
 
     bool ballRun = false;
     uint16_t ballHStartX = 0;
@@ -452,7 +542,8 @@ void ColorSegmenter::constructRuns(const FocusArea& area, int colorFlags) {
       if (hRunClr != c && (hRunClr != hRecent || hRunClr == c_ORANGE || c == c_ORANGE) && isInFlags(hRunClr, colorFlags)) {
         if (hRunClr == c_FIELD_GREEN) {
           hGreenPosition[y] = hStartX;
-        } else if (hRunClr == c_BLUE || hRunClr == c_PINK || hRunClr == c_YELLOW || hRunClr == c_ORANGE ||
+        } 
+        if (hRunClr == c_BLUE || hRunClr == c_PINK || hRunClr == c_YELLOW || hRunClr == c_ORANGE || hRunClr == c_FIELD_GREEN || hRunClr == c_ROBOT_WHITE ||
                    (hRunClr == c_WHITE && hGreenPosition[y] != (uint16_t) -1)) {
 
           uint16_t valXI = hStartX;
@@ -479,6 +570,7 @@ void ColorSegmenter::constructRuns(const FocusArea& area, int colorFlags) {
 
           default: {
             // Save line segment
+//            cout << "VISION POINT " << static_cast<int>(hRunClr) << endl;       
             VisionPoint *lp =
               &horizontalPoint[hRunClr][y][horizontalPointCount[hRunClr][y]++];
             lp->xi = valXI;
@@ -487,7 +579,23 @@ void ColorSegmenter::constructRuns(const FocusArea& area, int colorFlags) {
             lp->yi = lp->yf = y;
             lp->dy = 1;
             lp->isValid = true;
+            if (hRunClr == c_WHITE && (hLastClr != c_FIELD_GREEN && prevHPoint != NULL)){
+              lp->isValid = false;
+//              cout << "NO GREEN BEFORE " << lp->xi << " " << lp->xf << " " << lp->yi << " " << lp->yf << " " << static_cast<int>(hLastClr) << endl;
+//              cout << "     PREV " << prevHPoint->xi << " " << prevHPoint->xf << " " << prevHPoint->yi << " " << prevHPoint->yf << " " << endl;
+            }
             lp->lbIndex = (uint16_t)-1; // Will get this information later
+
+
+            if (hLastClr == c_WHITE){
+              if (hRunClr != c_FIELD_GREEN){
+                prevHPoint->isValid = false;
+//              cout << "NO GREEN AFTER " << prevHPoint->xi << " " << prevHPoint->xf << " " << prevHPoint->yi << " " << prevHPoint->yf << " " << static_cast<int>(hRunClr) << endl;
+              }
+            }
+
+            prevHPoint = lp;
+            hLastClr = hRunClr;
           }
 
           }
@@ -544,12 +652,17 @@ void ColorSegmenter::constructRuns(const FocusArea& area, int colorFlags) {
       uint8_t runClr = vRunClr[x];
       uint8_t recent = vRecent[x];
 
+      VisionPoint *prevVPoint = prevVPointArray[x];
+      uint8_t vLastClr = vLastRunClr[x];
+
+
+
       // Vision Point Segment finishes
       if (runClr != recent && runClr != c && isInFlags(runClr, colorFlags)) {
         if (runClr == c_FIELD_GREEN) {
           vGreenPosition[x] = vStartY[x];
         }
-		if (runClr == c_BLUE || runClr == c_PINK || runClr == c_FIELD_GREEN ||
+        if (runClr == c_BLUE || runClr == c_PINK || runClr == c_FIELD_GREEN || runClr == c_ROBOT_WHITE ||
                    (vGreenPosition[x] != (uint16_t)-1 && runClr == c_WHITE)) {
 
           uint16_t valX = x;
@@ -582,6 +695,27 @@ void ColorSegmenter::constructRuns(const FocusArea& area, int colorFlags) {
             lp->dy = lp->yf - lp->yi + 1;
             lp->isValid = true;
             lp->lbIndex = (uint16_t)-1;
+            
+            
+            if (runClr == c_WHITE && (vLastClr != c_FIELD_GREEN && prevVPoint != NULL)){
+              lp->isValid = false; 
+//              cout << "NO GREEN BEFORE " << lp->xi << " " << lp->xf << " " << lp->yi << " " << lp->yf << " " << static_cast<int>(vLastClr) << endl;
+//              cout << "    PREV " << prevVPoint->xi << " " << prevVPoint->xf << " " << prevVPoint->yi << " " << prevVPoint->yf << " " << endl;
+            }
+
+
+            if (vLastClr == c_WHITE){
+              if (runClr != c_FIELD_GREEN){
+                prevVPoint->isValid = false;    
+//              cout << "NO GREEN AFTER " << prevVPoint->xi << " " << prevVPoint->xf << " " << prevVPoint->yi << " " << prevVPoint->yf << " " << static_cast<int>(runClr) << endl;
+              }
+            }
+
+            prevVPointArray[x] = lp;
+            vLastRunClr[x] = runClr;
+
+
+                   
           }
 
           }
@@ -602,7 +736,8 @@ void ColorSegmenter::constructRuns(const FocusArea& area, int colorFlags) {
     if(!isInFlags(hRunClr, colorFlags)) continue;
     if (hRunClr == c_FIELD_GREEN) {
       hGreenPosition[y] = hStartX;
-    } else if (hRunClr == c_BLUE || hRunClr == c_YELLOW || hRunClr == c_ORANGE) {
+    }
+    if (hRunClr == c_BLUE || hRunClr == c_YELLOW || hRunClr == c_ORANGE || hRunClr == c_FIELD_GREEN || hRunClr == c_ROBOT_WHITE) {
       // Save line segment
       completeHorizontalRun(hRunClr, y, hStartX, area.x2);
     }
@@ -616,7 +751,7 @@ void ColorSegmenter::constructRuns(const FocusArea& area, int colorFlags) {
     if (runClr == c_FIELD_GREEN) {
       vGreenPosition[x] = vStartY[x];
     }
-    if (runClr == c_BLUE || runClr == c_PINK || runClr == c_FIELD_GREEN) {
+    if (runClr == c_BLUE || runClr == c_PINK || runClr == c_FIELD_GREEN || runClr == c_ROBOT_WHITE) {
       // Save line segment
       completeVerticalRun(runClr, x, vStartY[x]);
     }
@@ -649,6 +784,10 @@ void ColorSegmenter::preProcessPoints() {
 
   // This is done for the colored bands
   // Join 2 linepoints together which are in the same vertical line and very close.
+/*
+
+  // Sanmit: Robots don't have bands anymore... 
+
   if (vparams_.ALLOW_BAND_MERGE_POINTS) {
     unsigned char bandColors[] = {
       c_BLUE,
@@ -673,6 +812,7 @@ void ColorSegmenter::preProcessPoints() {
       }
     }
   }
+*/  
 
 }
 

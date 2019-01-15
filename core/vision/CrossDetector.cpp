@@ -36,6 +36,7 @@ void CrossDetector::detectCrosses() {
       }
     }
   }
+  // TODO: Sanmit: Cross offset points to our PK cross. Does this mean it bypasses localization??? Need to look into it. Also it's unlikely we'd ever see 2 crosses in the same frame. 
   for(int i = 0; i < NUM_CROSSES; i++) {
     WorldObject* cross = &vblocks_.world_object->objects_[i + CROSS_OFFSET];
     detectCross(blobs, cross);
@@ -71,6 +72,13 @@ void CrossDetector::detectCross(BlobCollection& blobs, WorldObject* cross) {
         tlog(47, "Skipping blob %i (%i,%i to %i,%i) since too close to ball", i, blob.xi, blob.yi, blob.xf, blob.yf);
         continue;  
       }
+    }
+
+    // Another check to eliminate balls: check the gray/black(i.e. c_BLUE) in the lower half
+    float grayBelow = checkGrayBelow(left, right, bottom + (height / 2), top + (height / 2), hstep, vstep);
+    if (grayBelow > 0.350){
+        tlog(47, "Skipping blob %i (%i,%i to %i,%i) since too much gray around %f", i, blob.xi, blob.yi, blob.xf, blob.yf, grayBelow);
+      continue;
     }
 
     Position 
@@ -133,6 +141,30 @@ void CrossDetector::correctRanges(int& xmin, int& xmax, int& ymin, int& ymax, in
   ymin = ymin - (ymin % vstep);
 }
 
+
+// Check whether there is gray in the lower half and below the candidate (this is to throw out candidates on the ball)
+// Another option was to add ROBOT_WHITE in the green below check, but this cuts out some good crosses.
+// Also doing this separately because I don't know exactly what regions that function is checking
+float CrossDetector::checkGrayBelow(int xmin, int xmax, int ymin, int ymax, int hstep, int vstep){
+
+  tlog(47, "  checking gray below");
+  tlog(47, "Scanning from x:%i->%i, y:%i->%i", xmin, xmax, ymin, ymax);
+  correctRanges(xmin,xmax,ymin,ymax,hstep,vstep);
+  int numTotal = 0, numGray = 0;
+  for(int x = xmin; x <= xmax; x += hstep) {
+    for(int y = ymin; y <= ymax; y += vstep) {
+      Color c = color_segmenter_.xy2color(x,y);
+      numTotal++;
+      if(c == c_ROBOT_WHITE || c == c_BLUE) numGray++;
+    }
+  }
+  if (numTotal == 0) return 0.0;
+  tlog(47, "  ball pct: %f", (float)numGray/numTotal);
+  return (float) numGray / numTotal;
+}
+
+
+
 float CrossDetector::getGreenPercentage(int xmin, int xmax, int ymin, int ymax, int hstep, int vstep) {
   //printf("Scanning from x:%i->%i, y:%i->%i\n", xmin, xmax, ymin, ymax);
   tlog(47, "Scanning from x:%i->%i, y:%i->%i", xmin, xmax, ymin, ymax);
@@ -143,7 +175,7 @@ float CrossDetector::getGreenPercentage(int xmin, int xmax, int ymin, int ymax, 
       Color c = color_segmenter_.xy2color(x,y);
       numTotal++;
       if(c == c_FIELD_GREEN) numGreen++;
-      if(c == c_WHITE) return 0.0; // There shouldn't be any white around the cross
+      if(c == c_WHITE || c == c_ROBOT_WHITE || c == c_BLUE) return 0.0; // There shouldn't be any white or ball colored pixels around the cross
     }
   }
   if(numTotal == 0) return 0.0; // No false positives, no regrets

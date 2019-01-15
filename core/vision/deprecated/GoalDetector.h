@@ -15,27 +15,19 @@
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
 #include <vision/HoughDetector.h>
-#include <vision/FieldEdgeDetector.h>
 #include <vision/structures/GoalPostCandidate.h>
 #include <vision/structures/GoalCandidate.h>
-#include <vision/structures/HorizonLine.h>
-#include <Eigen/Eigen>
 
 class Classifier;
 
 /// @ingroup vision
 class GoalDetector : public ObjectDetector {
   public:
-    GoalDetector(DETECTOR_DECLARE_ARGS, ColorSegmenter& color_segmenter, BlobDetector& blob_detector, LineDetector& line_detector, HoughDetector& hough_detector, FieldEdgeDetector& field_edge_detector);
+    GoalDetector(DETECTOR_DECLARE_ARGS, ColorSegmenter& color_segmenter, BlobDetector& blob_detector, LineDetector& line_detector, HoughDetector& hough_detector);
     ~GoalDetector();
 
     // White goal detection!!
     void detectGoalPosts();
-
-
-    void setHorizon(const HorizonLine& horizon) { horizon_ = horizon; }
-
-    void detectWhiteGoal();     // Vision2017 new
 
 
     int postCount;    // Moved this here so we can compute statistics  
@@ -66,9 +58,6 @@ class GoalDetector : public ObjectDetector {
     BlobDetector& blob_detector_;
     LineDetector& line_detector_;
     HoughDetector& hough_detector_;
-    FieldEdgeDetector& field_edge_detector_;
-
-    HorizonLine horizon_;
 
     unsigned char color;
 
@@ -108,22 +97,8 @@ class GoalDetector : public ObjectDetector {
     static int totalPosts;
     std::unique_ptr<Classifier> classifier_;
 
-
-    Coordinates transformPointInv(int x, int y);
-
-    Eigen::Matrix3f H;
-    Eigen::Matrix3f Hinv;
-
-
-    float calculatePostWhitePercentage(LineSegment leftEdge, LineSegment rightEdge, int xstep, int ystep);
-
-
-
-    float calculateEdgeBetweenStrength(LineSegment &line1, LineSegment &line2, cv::Mat &mat);
-
 };
 
-bool sortLineSegmentByXF(LineSegment line1, LineSegment line2);
 
 
 

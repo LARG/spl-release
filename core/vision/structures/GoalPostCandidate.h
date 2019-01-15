@@ -7,24 +7,36 @@
 /// @ingroup vision
 struct GoalPostCandidate {
 
+// COMMON TO BOTH
+
   // Vision/Localization properties 
   uint16_t xi, xf, yi, yf; 
   uint16_t avgX, avgY;
   Position relPosition;     // relative position in world coordinates (calculated from camera matrix's getWorldPosition())
 
-  // Features
+  float width;              // Estimated world width of the post
+  bool invalid;
+  int invalidIndex;     // For debugging
+
   float whitePct;
+
+// NEW FIELDS
+
+  uint16_t objectIndex;       // Index into the objects ROI array from FieldEdgeDetector
+
+
+
+
+/// OLD FIELDS
+
+  // Features
   float greenBelowPct;
   int edgeSize;
   int edgeStrength;
-  float width;              // Estimated world width of the post
 
 
   int leftEdgeWidth;    // Width of the edge in pixels
   int rightEdgeWidth;   // Width of the edge in pixels
-
-  bool invalid;
-  int invalidIndex;     // For debugging
 
 };
 

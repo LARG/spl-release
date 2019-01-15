@@ -13,6 +13,8 @@
 #include <memory/SensorBlock.h>
 #include <memory/GameStateBlock.h>
 #include <memory/ROIBlock.h>
+#include <memory/BehaviorBlock.h>
+#include <memory/TeamPacketsBlock.h>
 
 /// @ingroup vision
 class VisionBlocks {
@@ -28,6 +30,8 @@ class VisionBlocks {
     SensorBlock*& sensor;
     GameStateBlock*& game_state;
     ROIBlock*& roi;
+    BehaviorBlock*& behavior;
+    TeamPacketsBlock*& team_packets;    // Added this so we can filter teammates vs opponents in vision roughly using localization. It's also a dependency now in VisionModule - SN 7/19/17
 
     VisionBlocks(
         WorldObjectBlock*& world_object_block,
@@ -40,7 +44,9 @@ class VisionBlocks {
         RobotInfoBlock*& robot_info_block,
         SensorBlock*& sensor_block,
         GameStateBlock*& game_state_block,
-        ROIBlock*& roi_block
+        ROIBlock*& roi_block,
+        BehaviorBlock*& behavior_block,
+        TeamPacketsBlock*& team_packets_block
       )
       : world_object(world_object_block),
       body_model(body_model_block),
@@ -52,7 +58,9 @@ class VisionBlocks {
       robot_info(robot_info_block),
       sensor(sensor_block),
       game_state(game_state_block),
-      roi(roi_block)
+      roi(roi_block),
+      behavior(behavior_block),
+      team_packets(team_packets_block)
       { }
 
     VisionBlocks(MemoryCache& cache)
@@ -66,7 +74,9 @@ class VisionBlocks {
       robot_info(cache.robot_info),
       sensor(cache.sensor),
       game_state(cache.game_state),
-      roi(cache.roi)
+      roi(cache.roi),
+      behavior(cache.behavior),
+      team_packets(cache.team_packets)  
       { }
 };
 

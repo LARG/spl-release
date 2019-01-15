@@ -40,6 +40,12 @@ struct HorizonLine {
 
     file.close();
   }
+
+  inline int getYGivenX(int x){
+    return gradient * x + offset; 
+  }
+
+
 };
 
 #endif
