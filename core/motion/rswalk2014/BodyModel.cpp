@@ -7,7 +7,7 @@
 #include "utils/matrix_helpers.hpp"
 
 const float BodyModel::COM_HEIGHT = 200;
-const float BodyModel::MOTION_DT = 1 / 100.0f;
+const float BodyModel::MOTION_DT = 1 / 83.0f;
 const float BodyModel::FOOT_LENGTH = 160;
 const float BodyModel::L_RATE = 0.5;
 
@@ -252,7 +252,7 @@ void BodyModel::processUpdate(Odometry *odometry, const SensorValues &sensors) {
    }
 
    //prediction update
-   pendulumModel.predictNext(1/100.0, zmpFootOffset);
+   pendulumModel.predictNext(1/83.0, zmpFootOffset);
 
    //std::cout << "##############" << std::endl;
    //std::cout << "prediction:   " << std::endl;
@@ -280,7 +280,7 @@ void BodyModel::processUpdate(Odometry *odometry, const SensorValues &sensors) {
       
    pendulumModel.x = (1 - beta) * pendulumModel.x + (beta) * supportFootPosition;
    if (pendulumModel.walkCycle.leftPhase == currentWalkCycle.leftPhase) {
-      pendulumModel.dx = (1 - alpha) * pendulumModel.dx + (alpha) * (pendulumModel.x - lastPendulumModel.x) * 100;
+      pendulumModel.dx = (1 - alpha) * pendulumModel.dx + (alpha) * (pendulumModel.x - lastPendulumModel.x) * 83;
    } else { //switching foot
       pendulumModel.x = -pendulumModel.x/1.2;
    }

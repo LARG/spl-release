@@ -20,6 +20,10 @@
 #include <errno.h>
 #include <iostream>
 
+#include <stdint.h>
+#include <linux/usb/video.h>
+#include <linux/uvcvideo.h>
+
 // struct buffer {
 //   void * start;
 //   size_t length;
@@ -46,6 +50,12 @@ public:
   bool selfTest();
   ~NaoCamera();
 
+  int set_uvc_xu(int device_fd, uint8_t extension_unit_id, uint8_t control_selector, uint16_t size, uint8_t* data);
+  int get_uvc_xu(int device_fd, uint8_t control_selector, uint16_t size, uint8_t* data);
+  
+  void enableAutoWB();
+  int lockWB();
+
 protected:
     bool vflip_, hflip_;
     std::string device_path_;
@@ -54,6 +64,7 @@ protected:
     NaoCamera(const ImageParams& iparams, CameraParams&, CameraParams&);
     void init();
     int exposure; 
+    int brightness;
 
 private:
   const ImageParams& iparams_;

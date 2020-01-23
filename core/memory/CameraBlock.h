@@ -16,7 +16,8 @@ DECLARE_INTERNAL_SCHEMA(struct CameraBlock : public MemoryBlock {
       reset_top_camera_(false),
       reset_bottom_camera_(false),
       cameras_tested_(false),
-      comm_module_request_received_(false)
+      comm_module_request_received_(false),
+      calibrate_white_balance_(false)
         {
           header.version = 7;
           header.size = sizeof(CameraBlock);
@@ -68,6 +69,7 @@ DECLARE_INTERNAL_SCHEMA(struct CameraBlock : public MemoryBlock {
     SCHEMA_FIELD(bool reset_bottom_camera_);
     SCHEMA_FIELD(bool cameras_tested_);
     SCHEMA_FIELD(bool comm_module_request_received_);
+    SCHEMA_FIELD(bool calibrate_white_balance_);
 });
 
 #endif /* end of include guard: CAMERABLOCK_D16C3JJ3 */

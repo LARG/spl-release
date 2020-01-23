@@ -2,28 +2,28 @@
 #define WALKPARAMBLOCK_REVJHZ5T
 
 #include <memory/MemoryBlock.h>
+#include <motion/BHWalkParameters.h>
 #include <motion/RSWalkParameters.h>
 
 struct WalkParamBlock : public MemoryBlock {
   NO_SCHEMA(WalkParamBlock);
   WalkParamBlock():
-    send_params_(false)
+    send_params_(false),
+    use_sprint_params_(false)
   {
     header.version = 11;
     header.size = sizeof(WalkParamBlock);
   }
 
   bool send_params_;
-  RSWalkParameters rs_params_;
-  float sagittal_prior_mean;
-  float sagittal_prior_stddev;
-  float coronal_prior_mean;
-  float coronal_prior_stddev;
-  float dir_change_wait_duration;
-  float turn_limit;
-  float walking_turn_limit;
+  bool use_sprint_params_;
+  bool can_sprint_;
+  RSWalkParameters main_params_;
+  RSWalkParameters sprint_params_;
 
-  float walkHeight() { return 400; } //TODO: Put in an actual computation for this
+  // TODO: Put in an actual computation for this
+  // This is needed for some tool drawing functionality
+  float walkHeight() { return 400; }
 };
 
 #endif /* end of include guard: WALKPARAMBLOCK_REVJHZ5T */

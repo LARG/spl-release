@@ -23,13 +23,13 @@ DECLARE_INTERNAL_SCHEMA(struct GameStateBlock : public MemoryBlock {
       ourScore = 0;
       opponentScore = 0;
       secsTillUnpenalised = 0;
-      dropInTime = -1.0;
-      lastOutBy = 0;
       secsRemaining = 600;
       frameReceived = 0;
       lastStateChangeFromButton = false;
       lastTimeLeftPenalized = -1;
       whistleTime =  0;
+      isFreeKick = false;
+      isFreeKickTypeGoal = false;
     }
 
     State state() { return state_; }
@@ -61,11 +61,11 @@ DECLARE_INTERNAL_SCHEMA(struct GameStateBlock : public MemoryBlock {
     SCHEMA_FIELD(int opponentScore);
     SCHEMA_FIELD(int secsTillUnpenalised);
     SCHEMA_FIELD(int isFirstHalf);   
-    SCHEMA_FIELD(int lastOutBy);           
-    SCHEMA_FIELD(int dropInTime);
 
     SCHEMA_FIELD(int frameReceived);
     SCHEMA_FIELD(int whistleTime);
+    SCHEMA_FIELD(bool isFreeKick);
+    SCHEMA_FIELD(bool isFreeKickTypeGoal);
 
     SCHEMA_FIELD(bool lastStateChangeFromButton);
     SCHEMA_FIELD(float lastTimeLeftPenalized);

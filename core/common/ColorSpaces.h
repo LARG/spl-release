@@ -1,6 +1,9 @@
 #ifndef _COLOUR_SPACES_H
 #define _COLOUR_SPACES_H
 
+#include <math.h>
+#include <algorithm>
+
 // Color conversions
 
 struct RGB {
@@ -20,6 +23,12 @@ struct YUV422 {
   int y0;
   int v;
   int y1;
+};
+
+struct HSV {
+  float h;
+  float s;
+  float v;
 };
 
 inline int clip255(int x) {
@@ -82,4 +91,42 @@ inline void YUV422_TO_RGB(YUV422 uyvy, RGB* rgb1, RGB* rgb2) {
   *rgb1 = YUV444_TO_RGB(uyvy.y0,uyvy.u,uyvy.v);
   *rgb2 = YUV444_TO_RGB(uyvy.y1,uyvy.u,uyvy.v);
 }
+
+// Note: this is not optimized. Based on python implementation of colorsys.rgb_to_hsv
+inline HSV RGB_TO_HSV( RGB rgb){
+
+  HSV hsv;
+
+  int maxC = std::max(std::max(rgb.r, rgb.g), rgb.b);
+  int minC = std::min(std::min(rgb.r, rgb.g), rgb.b);
+
+  hsv.v = maxC / 255.0;
+
+  if (minC == maxC){
+    hsv.h = 0;
+    hsv.s = 0;
+    return hsv;
+  }
+
+  float diffC = maxC - minC;
+  hsv.s = diffC / maxC;
+  
+    
+  float rc = (maxC-rgb.r) / diffC;
+  float gc = (maxC-rgb.g) / diffC;
+  float bc = (maxC-rgb.b) / diffC;
+
+  if (rgb.r == maxC)
+    hsv.h = bc-gc;
+  else if (rgb.g == maxC)
+    hsv.h = 2.0+rc-bc;
+  else 
+    hsv.h = 4.0+gc-rc;
+
+  hsv.h = fmod((hsv.h/6.0), 1.0);
+  return hsv;
+
+}
+
+
 #endif

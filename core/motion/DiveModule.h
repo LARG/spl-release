@@ -14,6 +14,12 @@
 class DiveModule: public SpecialMotionModule {
 public:
   DiveModule();
+
+  bool isDiving() { return isDoingSpecialMotion() && (currMotion == diveLeft || currMotion == diveRight || currMotion == goalieSquat || currMotion == defenderSquat || currMotion == penaltyDiveLeft || currMotion == penaltyDiveRight); }
+  void initDive(Dive::diveTypes type, int role);
+
+protected:
+  bool processFrameChild();
 };
 
 

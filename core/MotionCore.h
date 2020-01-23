@@ -29,6 +29,7 @@ class RobotStateBlock;
 class KinematicsModule;
 class KickModule;
 class MotionModule;
+class GetupModule;
 class SpecialMotionModule;
 class SensorModule;
 class SonarModule;
@@ -52,12 +53,12 @@ public:
   void enableTextLogging(const char *filename = NULL);
   void disableLogging();
   void disableTextLogging();
+  void checkTemperature();
   
-  void updateOdometry();
-
   MemoryFrame memory_;
   CoreType type_;
   unsigned int last_frame_processed_;
+  double last_temperature_check_time_;
 
   bool use_com_kick_;
 
@@ -66,6 +67,7 @@ public:
   MotionModule *motion_;
   SensorModule *sensor_;
   SonarModule *sonar_;
+  GetupModule *getup_;
   DiveModule *dive_;
   SpecialMotionModule *specialM_;
   WalkModule *walk_;

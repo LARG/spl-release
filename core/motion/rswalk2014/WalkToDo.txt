@@ -1,4 +1,22 @@
 
+V6 Update issues
+I grepped for ".01", 100, and "ms" and found the following lines that possibly relate to frame-rate. Probably they aren't all that important and I might be wrong on a few.
+
+https://github.com/LARG/spl/blob/master/core/motion/rswalk2014/Walk2014Generator.cpp#L125
+https://github.com/LARG/spl/blob/master/core/motion/rswalk2014/BodyModel.cpp#L10
+https://github.com/LARG/spl/blob/master/core/motion/rswalk2014/BodyModel.cpp#L255
+https://github.com/LARG/spl/blob/master/core/motion/rswalk2014/RSWalkModule2014.cpp#L212-L213
+https://github.com/LARG/spl/blob/master/core/motion/rswalk2014/perception/kinematics/CKF.cpp#L9
+https://github.com/LARG/spl/blob/master/core/motion/rswalk2014/WalkCycle.hpp#L9
+
+Maybe but not really sure...
+https://github.com/LARG/spl/blob/master/core/motion/rswalk2014/BodyModel.cpp#L283
+- I changed this in sim so maybe good to do for v6 as well.
+https://github.com/LARG/spl/blob/master/core/motion/rswalk2014/Walk2014Generator.cpp#L555
+- This one references some parameters that have values 0.01 and 0.02. Might need to change
+
+https://github.com/LARG/spl/blob/master/core/motion/rswalk2014/utils/body.hpp#L273-L311
+
 
 Last Week Todo
 

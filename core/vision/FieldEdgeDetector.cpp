@@ -44,6 +44,8 @@ bool FieldEdgeDetector::detectFieldEdges(){
 //  printf("Finding objects\n");
 
 
+/* TODO V6-UPDATE -- RE-ENABLE THIS STUFF
+
   findPossibleObjects();
 
 
@@ -55,7 +57,7 @@ bool FieldEdgeDetector::detectFieldEdges(){
   sortObjects();
 
 //  printf("END FIELD EDGE LOOP\n");
-
+*/
   return true;
 }
 
@@ -89,6 +91,12 @@ bool FieldEdgeDetector::findFieldEdgePoints(){
  
   //printf("Finding field edge points\n");
 
+// TODO: need to initialize text logger before using this
+//  tlog(80, "Finding field edge points");
+
+
+
+  VisionTimer::Start(80, "FieldEdgeDetector(%s)::findFieldEdgePoints", camera_);
 
   VisionPoint ***verticalPoint = color_segmenter_.verticalPoint;
   uint32_t **verticalPointCount = color_segmenter_.verticalPointCount;
@@ -96,6 +104,29 @@ bool FieldEdgeDetector::findFieldEdgePoints(){
   int index = 0;
 
 //  printf("hstep %d vstep %d\n", hstep, vstep);
+
+
+
+
+  // Precompute cmatrix distances
+
+  const int xjump = 160;
+  const int yjump = 80;
+
+
+  VisionTimer::Start(80, "FieldEdgeDetector(%s)::roughCmatrix", camera_);
+  Position positions[13][9];
+  for (int row = 0; row < 13; row++){
+    for (int col = 0; col < 9; col++){
+      positions[row][col] = cmatrix_.getWorldPosition(col * xjump, row * yjump); 
+    }
+  }
+  VisionTimer::Stop("FieldEdgeDetector(%s)::roughCmatrix", camera_);
+
+
+
+
+  VisionTimer::Start(80, "FieldEdgeDetector(%s)::iterateX", camera_);
 
   // Iterate over X
   for (int x = 0; x < iparams_.width; x += hstep){
@@ -112,23 +143,78 @@ bool FieldEdgeDetector::findFieldEdgePoints(){
 */
 
 
-    Position edgeYPos = cmatrix_.getWorldPosition(x, edgeY);
+    // Position edgeYPos = cmatrix_.getWorldPosition(x, edgeY);
+    
+    Position left = positions[12][(int)floor(1.0 * x / xjump)];
+    Position right = positions[12][(int)ceil(1.0 * x / xjump)];
+ 
+    Position edgeYPos = left + ((right - left) * (fmod(1.0 * x, xjump) / xjump ));
+
+//    std::cout << left << " " << right << " " << fmod(1.0 * x, xjump) / xjump << "\n";
+
+
+//    Position edgeYPos = (left + right) / 2.0;
+
+
 
     // Iterate over the vertical run
     for (int i = verticalPointCount[c_FIELD_GREEN][x] - 1; i >= 0; i--){
 
 
       // Compare yf of this run to the current edgeY (i.e. yi of previous run)
-      Position yfPos = cmatrix_.getWorldPosition(x, verticalPoint[c_FIELD_GREEN][x][i].yf);  
+      // Position yfPos = cmatrix_.getWorldPosition(x, verticalPoint[c_FIELD_GREEN][x][i].yf);  
 
+
+      int yf = verticalPoint[c_FIELD_GREEN][x][i].yf;
+
+      Position topLeft = positions[(int)floor(1.0 * yf / yjump)][(int)floor(1.0 * x / xjump)];
+      Position topRight = positions[(int)floor(1.0 * yf / yjump)][(int)ceil(1.0 * x / xjump)];
+      Position bottomLeft = positions[(int)ceil(1.0 * yf / yjump)][(int)floor(1.0 * x / xjump)];
+      Position bottomRight = positions[(int)ceil(1.0 * yf / yjump)][(int)ceil(1.0 * x / xjump)];
+
+
+      Position yInterp = bottomLeft  + ((topLeft - bottomLeft) * (1 - (fmod(1.0 * yf , yjump) / yjump)));
+      Position xInterp = bottomLeft + ((bottomRight - bottomLeft) * (fmod(1.0 * x, xjump) / xjump));
+      Position yfPos(yInterp.x, xInterp.y, yInterp.z);
+
+
+//      Position yfPos = (topLeft + topRight + bottomLeft + bottomRight) / 4.0;
+
+
+//      cout << yfPos << " " << yfPosNew << "\n";
 
       // If the distance is less than 1m projected, set the new edgeY to be 
       
       double dist = sqrt(((edgeYPos.x - yfPos.x) * (edgeYPos.x - yfPos.x)) + ((edgeYPos.y - yfPos.y) * (edgeYPos.y - yfPos.y))); 
 
+
+//      cout << dist << "\n";
+
+//      double dist = edgeY - verticalPoint[c_FIELD_GREEN][x][i].yf;
       if (dist < 500){
         edgeY = verticalPoint[c_FIELD_GREEN][x][i].yi;
-        edgeYPos = cmatrix_.getWorldPosition(x, edgeY);
+        // edgeYPos = cmatrix_.getWorldPosition(x, edgeY);
+      
+      
+        Position topLeftYi = positions[(int)floor(1.0 * edgeY / yjump)][(int)floor(1.0 * x / xjump)];
+        Position topRightYi = positions[(int)floor(1.0 * edgeY / yjump)][(int)ceil(1.0 * x / xjump)];
+        Position bottomLeftYi = positions[(int)ceil(1.0 * edgeY / yjump)][(int)floor(1.0 * x / xjump)];
+        Position bottomRightYi = positions[(int)ceil(1.0 * edgeY / yjump)][(int)ceil(1.0 * x / xjump)];
+
+
+        Position yInterpYi = bottomLeftYi  + ((topLeftYi - bottomLeftYi) * (1 - (fmod(1.0 * edgeY, yjump) / yjump)));
+        Position xInterpYi = bottomLeftYi + ((bottomRightYi - bottomLeftYi) * (fmod(1.0 * x, xjump) / xjump));
+        
+        //Position edgeYPos(yInterpYi.x, xInterpYi.y, yInterpYi.z);
+        edgeYPos.x = yInterpYi.x;
+        edgeYPos.y = xInterpYi.y;
+
+
+
+//        edgeYPos = (topLeftYi + topRightYi + bottomLeftYi + bottomRightYi) / 4.0;
+      
+      
+      
       }
 
 
@@ -141,6 +227,12 @@ bool FieldEdgeDetector::findFieldEdgePoints(){
     fieldEdgePoints[index++] = edgeY;
 
   }
+
+
+
+
+  VisionTimer::Stop("FieldEdgeDetector(%s)::iterateX", camera_);
+
 
   //printf("Finished extracting edge points\n");
 
@@ -178,15 +270,26 @@ bool FieldEdgeDetector::findFieldEdgePoints(){
   // Shorter/hacky version
 //  do {
 
+
+  VisionTimer::Start(80, "FieldEdgeDetector(%s)::removeOutliers", camera_);
+
     removeOutliers();
+    
+  VisionTimer::Stop("FieldEdgeDetector(%s)::removeOutliers", camera_);
+    
+  VisionTimer::Start(80, "FieldEdgeDetector(%s)::cvxHull", camera_);
     convexHull();
-//  } while (removeOutliers(hullPointCands));
+
+  VisionTimer::Stop("FieldEdgeDetector(%s)::cvxHull", camera_);
+    
+    //  } while (removeOutliers(hullPointCands));
 
 
 
 
   // Find all the points that are below the hull
 
+  VisionTimer::Start(80, "FieldEdgeDetector(%s)::belowHull", camera_);
   int greenIndex = hullPointCands.size()-1;
   int BELOW_THRESH = 16; 
 
@@ -222,6 +325,7 @@ bool FieldEdgeDetector::findFieldEdgePoints(){
   }
 
 
+  VisionTimer::Stop("FieldEdgeDetector(%s)::belowHull", camera_);
 
 
 
@@ -230,7 +334,11 @@ bool FieldEdgeDetector::findFieldEdgePoints(){
 
 
 //  circle(m_img, cv::Point(x, color_segmenter_.fieldEdgePoints[x/hstep]), 2, Scalar(0, 200, 0), 2);
-      
+
+
+
+  VisionTimer::Stop("FieldEdgeDetector(%s)::findFieldEdgePoints", camera_);
+
   return true;
 }
 
@@ -446,7 +554,7 @@ void FieldEdgeDetector::findPossibleObjects(){
       if ((hullPointCands[i].x - xi) / hstep >= MIN_SEGMENT_SIZE){
         
         // Create a new object point
-        ObjectCandidate lp;
+        VisionObjectCandidate lp;
         lp.xi = xi;
         lp.xf = hullPointCands[i].x - hstep;
         lp.dx = lp.xf - lp.xi + 1;

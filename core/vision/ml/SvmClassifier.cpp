@@ -1,10 +1,10 @@
 #include <vision/ml/SvmClassifier.h>
 #include <vision/ml/OcvSvm.h>
 #include <common/Util.h>
-#include <yuview/YUVImage.h>
+// #include <yuview/YUVImage.h>
 #include <system_error>
 
-#include <vision/ml/SiftFeatureExtractor.h>
+//#include <vision/ml/SiftFeatureExtractor.h>
 #include <vision/ml/HogFeatureExtractor.h>
 #include <vision/ml/RawFeatureExtractor.h>
 #include <vision/ml/Util.h>
@@ -14,14 +14,14 @@ using namespace std;
 SvmClassifier::SvmClassifier(const string& name, const string& directory, FeatureExtractors extractors, cv::Size windowSize)
   : Classifier(name, directory) {
   _svm = std::make_unique<OcvSvm>();
-  if(extractors & FeatureExtractors::SIFT) {
-    _siftExtractor = std::make_unique<SiftFeatureExtractor>();
-    _siftExtractor->quantized() = false;
-  }
-  if(extractors & FeatureExtractors::QuantizedSIFT) {
-    _siftExtractor = std::make_unique<SiftFeatureExtractor>();
-    _siftExtractor->quantized() = true;
-  }
+//  if(extractors & FeatureExtractors::SIFT) {
+//    _siftExtractor = std::make_unique<SiftFeatureExtractor>();
+//    _siftExtractor->quantized() = false;
+//  }
+//  if(extractors & FeatureExtractors::QuantizedSIFT) {
+//    _siftExtractor = std::make_unique<SiftFeatureExtractor>();
+//    _siftExtractor->quantized() = true;
+//  }
   if(extractors & FeatureExtractors::HOG) {
     _hogExtractor = std::make_unique<HogFeatureExtractor>(windowSize);
     _hogExtractor->quantized() = false;
@@ -37,7 +37,7 @@ SvmClassifier::SvmClassifier(const string& name, const string& directory, Featur
 
 SvmClassifier::SvmClassifier(SvmClassifier&& other) : Classifier(other) {
   _hogExtractor = std::move(other._hogExtractor);
-  _siftExtractor = std::move(other._siftExtractor);
+//  _siftExtractor = std::move(other._siftExtractor);
   _rawExtractor = std::move(other._rawExtractor);
   _svm = std::move(other._svm);
 
@@ -61,10 +61,10 @@ void SvmClassifier::load() {
   YAML::Parser parser(fh);
   YAML::Node node;
   parser.GetNextDocument(node);
-  if(const YAML::Node *sift = node.FindValue("SiftExtractor")) {
-    _siftExtractor = std::make_unique<SiftFeatureExtractor>();
-    *sift >> *_siftExtractor;
-  }
+//  if(const YAML::Node *sift = node.FindValue("SiftExtractor")) {
+//    _siftExtractor = std::make_unique<SiftFeatureExtractor>();
+//    *sift >> *_siftExtractor;
+//  }
   if(const YAML::Node *hog = node.FindValue("HOGExtractor")) {
     _hogExtractor = std::make_unique<HogFeatureExtractor>();
     *hog >> *_hogExtractor;
@@ -85,8 +85,8 @@ void SvmClassifier::save() const {
   ofstream fh(file.c_str());
   YAML::Emitter emitter;
   emitter << YAML::BeginMap;
-  if(useSIFT())
-    emitter << YAML::Key << "SiftExtractor" << YAML::Value << *_siftExtractor;
+//  if(useSIFT())
+//    emitter << YAML::Key << "SiftExtractor" << YAML::Value << *_siftExtractor;
   if(useHOG())
     emitter << YAML::Key << "HOGExtractor" << YAML::Value << *_hogExtractor;
   if(useRaw())
@@ -109,10 +109,10 @@ bool SvmClassifier::train(const vector<string>& imageFiles, const vector<cv::Rec
     _hogExtractor->quantizePoint() = maxFile;
     _hogExtractor->labels() = labels;
   }
-  if(useSIFT()) {
-    _siftExtractor->quantizePoint() = maxFile;
-    _siftExtractor->labels() = labels;
-  }
+//  if(useSIFT()) {
+//    _siftExtractor->quantizePoint() = maxFile;
+//   _siftExtractor->labels() = labels;
+//  }
   std::vector<cv::Mat> images;
   for(int i = 0; i < imageFiles.size(); i++) {
     printf("\rLoading training image %04i/%zu", i, imageFiles.size());
@@ -127,14 +127,15 @@ bool SvmClassifier::train(const vector<string>& imageFiles, const vector<cv::Rec
     box = correctBoundingBox(box, image);
     cv::Mat roi = image(box);
     cv::Mat gray(roi.size(), CV_8U);
-    if(useSIFT() || useHOG()) {
+//    if(useSIFT() || useHOG()) {
+    if(useHOG()) {
       if(roi.channels() != 1)
         cv::cvtColor(roi, gray, CV_RGB2GRAY);
       else
         gray = roi.clone();
     }
     try {
-      if(useSIFT()) _siftExtractor->processImage(gray);
+//      if(useSIFT()) _siftExtractor->processImage(gray);
       if(useHOG()) _hogExtractor->processImage(gray);
       if(useRaw()) _rawExtractor->processImage(roi);
     } catch (std::exception& e) {
@@ -143,10 +144,10 @@ bool SvmClassifier::train(const vector<string>& imageFiles, const vector<cv::Rec
     }
   }
   FeatureSet fset;
-  if(useSIFT()) { 
-    fset.push_back(_siftExtractor->getFeatures());
-    _siftExtractor->clearFeatures();
-  }
+//  if(useSIFT()) { 
+//    fset.push_back(_siftExtractor->getFeatures());
+//    _siftExtractor->clearFeatures();
+//  }
   if(useHOG()) { 
     fset.push_back(_hogExtractor->getFeatures());
     _hogExtractor->clearFeatures();
@@ -185,17 +186,18 @@ Classifier::Prediction SvmClassifier::classify(const cv::Mat& image, float& cert
   auto box = correctBoundingBox(cv::Rect(0, 0, image.cols, image.rows), image);
   cv::Mat roi = image(box);
   cv::Mat gray(roi.size(), CV_8U);
-  if(useSIFT() || useHOG()) {
+//  if(useSIFT() || useHOG()) {
+  if(useHOG()) {
     if(roi.channels() != 1)
       cv::cvtColor(roi, gray, CV_RGB2GRAY);
     else
       gray = roi.clone();
   }
   FVec feature;
-  if(useSIFT()) {
-    assert(!_siftExtractor->quantized() || _siftExtractor->vocabularyBuilt());
-    feature.push_back(_siftExtractor->extractFeature(gray));
-  }
+//  if(useSIFT()) {
+//    assert(!_siftExtractor->quantized() || _siftExtractor->vocabularyBuilt());
+//    feature.push_back(_siftExtractor->extractFeature(gray));
+//  }
   if(useHOG()) {
     assert(!_hogExtractor->quantized() || _hogExtractor->vocabularyBuilt());
     feature.push_back(_hogExtractor->extractFeature(gray));

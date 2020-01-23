@@ -27,6 +27,8 @@
 #include <sensor/SensorModule.h>
 #include <vision/VisionModule.h>
 #include <lights/LEDModule.h>
+#include <localization/ParallelLocalizationModule.h>
+#include <localization/PerfectLocalizationModule.h>
 #include <opponents/OppModule.h>
 #include <behavior/BehaviorModule.h>
 #include <sensor/ButtonModule.h>
@@ -66,6 +68,7 @@ VisionCore::VisionCore (CoreType type, bool use_shared_memory, int team_num, int
   vision_(NULL),
   localization_(NULL),
   opponents_(NULL),
+  perfect_localization_(NULL),
   behavior_(NULL),
   buttons_(NULL),
   leds_(NULL),
@@ -94,6 +97,8 @@ VisionCore::VisionCore (CoreType type, bool use_shared_memory, int team_num, int
   initModules(locMethod);
   vtimer_.setInterval(30 * 5);
   camtimer_.setInterval(30 * 5);
+  atimer_.setInterval(30 * 5);
+  auto_wb_flag_ = false;
 }
 
 VisionCore::~VisionCore() {
@@ -115,6 +120,8 @@ VisionCore::~VisionCore() {
     delete localization_;
   if (opponents_ != NULL)
     delete opponents_;
+  if (perfect_localization_ != NULL)
+    delete perfect_localization_;
   if (communications_ != NULL)
     delete communications_;
   if (behavior_ != NULL)
@@ -131,6 +138,8 @@ VisionCore::~VisionCore() {
 }
 
 void VisionCore::processVisionFrame() {
+
+
   vtimer_.start();
   camtimer_.start();
   preVision();
@@ -139,10 +148,27 @@ void VisionCore::processVisionFrame() {
   if (communications_ != NULL && interpreter_->is_ok_) {
     communications_->processFrame();
   }
+  // atimer_.start();
+  // if(game_state_->state() == SET || game_state_->state() == INITIAL)
+
+  // DO NOT TURN this off. We check whether Audio Processing is necessary in AudioModule.
+  // This part is necessary to reset whistle detection
   audio_->processFrame();
+  // atimer_.stop();
 
   if (buttons_ !=NULL) {
     buttons_->processButtons(); // check for any button related changes
+  }
+
+  // Enable Auto White Balance
+  if (camera_info_->calibrate_white_balance_ && !auto_wb_flag_){
+//    image_capture_->enableAutoWB();
+//    auto_wb_flag_ = true;             // SN 5/18: Turning this off while we look into how to deal with wb properly
+  }
+
+  if (!camera_info_->calibrate_white_balance_ && auto_wb_flag_){
+    image_capture_->lockWB();
+    auto_wb_flag_ = false;
   }
 
   auto& frame_id = vision_frame_info_->frame_id;
@@ -169,6 +195,7 @@ void VisionCore::processVisionFrame() {
 #ifndef TOOL
     printf("Vision: %2.2f Hz [%2.2f ms] (capped by %2.2f Hz [%2.2f ms] with camera)\n", 
       vtimer_.avgrate(), vtimer_.avgtime_ms(), camtimer_.avgrate(), camtimer_.avgtime_ms());
+    // printf("Audio: %2.2f Hz [%2.2f ms]", atimer_.avgrate(), atimer_.avgtime_ms());
 #endif
   }
 }
@@ -279,15 +306,20 @@ void VisionCore::initModules(LocalizationMethod::Type locMethod) {
   audio_ = new AudioModule();
   audio_->init(memory_,textlog_.get());
 
-  //localization_ = new ParallelLocalizationModule();
-  //localization_->method = locMethod;
-  //localization_->init(memory_,textlog_.get());
+  localization_ = new ParallelLocalizationModule();
+  localization_->method = locMethod;
+  localization_->init(memory_,textlog_.get());
 
   opponents_ = new OppModule();
   opponents_->init(memory_,textlog_.get());
 
-  //behavior_ = new BehaviorModule();
-  //behavior_->init(memory_,textlog_.get());
+  if (type_ == CORE_SIM){
+    perfect_localization_ = new PerfectLocalizationModule();
+    perfect_localization_->init(memory_,textlog_.get());
+  }
+  
+  behavior_ = new BehaviorModule();
+  behavior_->init(memory_,textlog_.get());
 
   buttons_ = new ButtonModule();
   buttons_->init(memory_,textlog_.get());
@@ -441,12 +473,12 @@ void VisionCore::updateMemory(MemoryFrame* memory, bool locOnly) {
   setMemoryVariables();
   if (vision_ && !locOnly)
     vision_->updateModuleMemory(memory_);
-  //if (localization_)
-    //localization_->updateModuleMemory(memory_);
+  if (localization_)
+    localization_->updateModuleMemory(memory_);
   if (opponents_)
     opponents_->updateModuleMemory(memory_);
-  //if (behavior_)
-    //behavior_->updateModuleMemory(memory_);
+  if (behavior_)
+    behavior_->updateModuleMemory(memory_);
   if (buttons_ && !locOnly)
     buttons_->updateModuleMemory(memory_);
   if (leds_)

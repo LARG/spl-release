@@ -407,6 +407,7 @@ DECLARE_INTERNAL_SCHEMA(class WorldObject {
     SCHEMA_FIELD(float radius); ///< The radius of this object in the frame image.
     SCHEMA_FIELD(int fieldLineIndex);
     SCHEMA_FIELD(int ballBlobIndex);
+    SCHEMA_FIELD(bool ballMoved); ///< This is only used by the keeper during penalty kicks.
 
     SCHEMA_FIELD(bool fromTopCamera); ///< True if observed from top cam, false if from bottom
 });

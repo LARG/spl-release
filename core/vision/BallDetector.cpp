@@ -2,7 +2,7 @@
 #include <vision/ROIDetector.h>
 #include <vision/ColorSegmenter.h>
 #include <vision/ml/SvmClassifier.h>
-#include <vision/ml/DeepClassifier.h>
+// #include <vision/ml/DeepClassifier.h>
 #include <VisionCore.h>
 
 

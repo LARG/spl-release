@@ -27,13 +27,13 @@ void ForwardKinematics::calculateRelativePose(float *joint_angles, float angleXv
     .rotateY(-joint_angles[HeadPitch]);
   rel_parts[BodyPart::top_camera] = Pose3D(rel_parts[BodyPart::head])
     .translate(dimensions[RobotDimensions::xHeadTiltToTopCamera], 0, dimensions[RobotDimensions::zHeadTiltToTopCamera])
-    .rotateY(dimensions[RobotDimensions::tiltOffsetToTopCamera] + dimensions[RobotDimensions::headTiltFactorTopCamera] * (M_PI_2 - abs(joint_angles[HeadPan])) / M_PI_2)
-    .rotateX(dimensions[RobotDimensions::rollOffsetToTopCamera] + dimensions[RobotDimensions::headRollFactorTopCamera] * joint_angles[HeadPan])
+    .rotateY(dimensions[RobotDimensions::tiltOffsetToTopCamera])
+    .rotateX(dimensions[RobotDimensions::rollOffsetToTopCamera])
     .rotateZ(dimensions[RobotDimensions::yawOffsetToTopCamera]);
   rel_parts[BodyPart::bottom_camera] = Pose3D(rel_parts[BodyPart::head])
     .translate(dimensions[RobotDimensions::xHeadTiltToBottomCamera], 0, dimensions[RobotDimensions::zHeadTiltToBottomCamera])
-    .rotateY(dimensions[RobotDimensions::tiltOffsetToBottomCamera] + dimensions[RobotDimensions::headTiltFactorBottomCamera] * (M_PI_2 - abs(joint_angles[HeadPan])) / M_PI_2)
-    .rotateX(dimensions[RobotDimensions::rollOffsetToBottomCamera] + dimensions[RobotDimensions::headRollFactorBottomCamera] * joint_angles[HeadPan])
+    .rotateY(dimensions[RobotDimensions::tiltOffsetToBottomCamera])
+    .rotateX(dimensions[RobotDimensions::rollOffsetToBottomCamera])
     .rotateZ(dimensions[RobotDimensions::yawOffsetToBottomCamera]);
 
   
@@ -147,6 +147,7 @@ void ForwardKinematics::calculateAbsolutePose(Pose3D base, Pose3D *rel_parts, Po
   //PRINT_PART(abs_parts, BodyPart::neck, "neck");
   //PRINT_PART(abs_parts, BodyPart::head, "head");
   //PRINT_PART(abs_parts, BodyPart::top_camera, "top cam");
+  //PRINT_PART(abs_parts, BodyPart::bottom_camera, "bottom cam");
 }
 
 void ForwardKinematics::calculateCoM(Pose3D *abs_parts, Vector3<float> &center_of_mass, const MassCalibration &mass_calibration) {

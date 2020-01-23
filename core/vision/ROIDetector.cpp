@@ -92,6 +92,9 @@ void ROIDetector::findBallROIs() {
   seams.clear();
   ballROIs.clear();
 
+
+  VisionTimer::Start(60, "ROIDetector(%s)::hull_generation", camera_);
+
   vector<FieldEdgePoint> hullPoints = field_edge_detector_.hullPointCands;
   
   int hullCounter = 0;
@@ -273,6 +276,7 @@ void ROIDetector::findBallROIs() {
   }
 
 
+  VisionTimer::Stop("ROIDetector(%s)::hull_generation", camera_);
 
 
 

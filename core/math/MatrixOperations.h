@@ -5,6 +5,7 @@
 #include <Eigen/Core>
 #include <limits>
 #include <algorithm>
+#include <numeric>
 #define PRINTMAT(x) std::cout << #x << ":\n" << x << "\n";
 
 class MatrixOperations {

@@ -6,7 +6,7 @@
 static const float angle_var = SQUARE(DEG2RAD(1.f)); //1
 static const float velocity_var = SQUARE(DEG2RAD(5.f)); //1 
 
-static const float dt = 0.01f; // 10ms time intervals
+static const float dt = 0.012f; // 10ms time intervals
 
 static const float acc_var = SQUARE(DEG2RAD(50.f)); //50
 static const float gyro_var = SQUARE(DEG2RAD(1.f));  

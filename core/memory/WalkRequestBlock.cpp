@@ -63,6 +63,11 @@ void WalkRequestBlock::standStraight() {
   set(STAND_STRAIGHT,Pose2D(0,0,0),true,false);
 }
 
+void WalkRequestBlock::standPenalty() {
+  finished_standing_ = false;
+  set(STAND_PENALTY,Pose2D(0,0,0),true,false);
+}
+
 void WalkRequestBlock::wait() {
   set(WAIT,Pose2D(0,0,0),true,false);
 }
@@ -76,6 +81,7 @@ void WalkRequestBlock::setStep(bool isLeft, float x, float y, float rotation) {
 void WalkRequestBlock::setWalk(float x, float y, float rotation) {
   set(WALK,Pose2D(rotation,x,y),true,false);
   walk_control_status_ = WALK_CONTROL_OFF;
+  is_rotate_ = false;
 }
 
 void WalkRequestBlock::setPedanticWalk(float x, float y, float rotation) {
@@ -105,6 +111,21 @@ void WalkRequestBlock::setLineUp(float relx, float rely, float rot, bool with_le
   target_point_.translation.x = relx;
   target_point_.translation.y = rely;
   target_point_.rotation = rot;//heading;
+  is_rotate_ = false;
+  
+}
+    
+void WalkRequestBlock::setLineUpParameters(float forward_gap, float left_gap, float forward_over_threshold, float forward_under_threshold, float left_threshold, float max_forward, float max_left, float done_ct, float turn_speed) {
+
+    kick_forward_gap_ = forward_gap;
+    kick_left_gap_ = left_gap;
+    kick_over_forward_threshold_ = forward_over_threshold;
+    kick_under_forward_threshold_ = forward_under_threshold;
+    kick_left_threshold_ = left_threshold;
+    kick_max_forward_ = max_forward;
+    kick_max_left_ = max_left;
+    kick_done_ct_ = done_ct; 
+    kick_turn_speed_ = turn_speed;
 }
 
 void WalkRequestBlock::setWalkKick(float relx, float rely, float rot, bool with_left, float heading)
@@ -113,6 +134,7 @@ void WalkRequestBlock::setWalkKick(float relx, float rely, float rot, bool with_
   motion_ = WALK;
   perform_kick_ = true;
   kick_heading_ = heading;
+  is_rotate_ = false;
   
 }
 void WalkRequestBlock::setOdometryOffsets(float fwd, float side, float turn) {

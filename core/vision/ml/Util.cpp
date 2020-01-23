@@ -7,7 +7,7 @@ namespace util {
   cv::Mat imread(std::string path) {
     cv::Mat image;
     if(util::endswith(path, ".yuv")) {
-      auto yuv = yuview::YUVImage::ReadSerializedObject(path);
+     auto yuv = yuview::YUVImage::ReadSerializedObject(path);
       image = yuv.toMat();
     } else {
       image = ::cv::imread(path);

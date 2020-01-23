@@ -9,7 +9,7 @@ DECLARE_INTERNAL_SCHEMA(struct AudioProcessingBlock : public MemoryBlock {
   public:
 #ifndef SWIG
     static constexpr int SampleRate = 48000; // Hz
-    static constexpr int NumChannels = 4;
+    static constexpr int NumChannels = 1;
     static constexpr float BufferTime = 85.0f; // ms
     static constexpr int SamplesPerChannelPerBuffer = static_math::round2(SampleRate * BufferTime / 1000.0f);
     static constexpr int BufferSampleCount = NumChannels * SamplesPerChannelPerBuffer;
@@ -38,6 +38,7 @@ DECLARE_INTERNAL_SCHEMA(struct AudioProcessingBlock : public MemoryBlock {
     SCHEMA_FIELD(int teammate_heard_frame_);
 #ifndef SWIG
     SCHEMA_FIELD(std::array<int16_t,BufferSampleCount> buffer_);
+    SCHEMA_FIELD(int num_samples);
 #endif
     SCHEMA_FIELD(AudioState state_);
     SCHEMA_FIELD(uint64_t timestamp_);

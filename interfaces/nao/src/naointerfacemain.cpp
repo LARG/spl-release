@@ -5,10 +5,10 @@
  */
 
 #include <boost/shared_ptr.hpp>
-#include <alcommon/albroker.h>
-#include <alcommon/almodule.h>
-#include <alcommon/albrokermanager.h>
-#include <alcommon/altoolsmain.h>
+// #include <alcommon/albroker.h>
+// #include <alcommon/almodule.h>
+// #include <alcommon/albrokermanager.h>
+// #include <alcommon/altoolsmain.h>
 
 #include "naointerface.h"
 #include "AudioWrapper.h"
@@ -31,13 +31,13 @@ extern "C"
 #endif
 
 
-ALCALL int _createModule(boost::shared_ptr<AL::ALBroker> pBroker) {
-  AL::ALBrokerManager::setInstance(pBroker->fBrokerManager.lock());
-  AL::ALBrokerManager::getInstance()->addBroker(pBroker);
-  AL::ALModule::createModule<naointerface>( pBroker, "naointerface" );
-  AL::ALModule::createModule<AudioWrapper>(pBroker, "AudioWrapper");
-  return 0;
-}
+// ALCALL int _createModule(boost::shared_ptr<AL::ALBroker> pBroker) {
+  // AL::ALBrokerManager::setInstance(pBroker->fBrokerManager.lock());
+  // AL::ALBrokerManager::getInstance()->addBroker(pBroker);
+  // AL::ALModule::createModule<naointerface>( pBroker, "naointerface" );
+  // AL::ALModule::createModule<AudioWrapper>(pBroker, "AudioWrapper");
+  // return 0;
+// }
 
 ALCALL int _closeModule() {
   return 0;
@@ -56,7 +56,7 @@ int main( int argc, char *argv[] )
   sig = &_createModule;
 
   // call main
-  ALTools::mainFunction("naointerface",argc, argv,sig);
+  // ALTools::mainFunction("naointerface",argc, argv,sig);
 }
 #endif
 

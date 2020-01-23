@@ -4,6 +4,7 @@
 #include <memory/RobotStateBlock.h>
 #include <memory/SensorBlock.h>
 #include <memory/SpeechBlock.h>
+#include <memory/CameraBlock.h>
 
 #define USE_LAB_BUTTONS
 
@@ -11,12 +12,13 @@ const float ButtonModule::MAX_CLICK_INTERVAL = 0.35f;
 const float ButtonModule::MIN_CLICK_TIME = 0.01f; // accept anything
 const float ButtonModule::MAX_CLICK_TIME = 0.75f;
 
-// #define USE_LAB_BUTTONS
+#define USE_LAB_BUTTONS
 
 ButtonModule::ButtonModule():
   center_(true),
   left_bumper_(false),
-  right_bumper_(false)
+  right_bumper_(false),
+  head_middle_(false)
 {
 }
 
@@ -26,26 +28,35 @@ void ButtonModule::specifyMemoryDependency() {
   requiresMemoryBlock("robot_state");
   requiresMemoryBlock("vision_sensors");
   requiresMemoryBlock("speech");
+  requiresMemoryBlock("camera_info");
 }
 
 void ButtonModule::specifyMemoryBlocks() {
-  getMemoryBlock(frame_info_,"vision_frame_info");
-  getMemoryBlock(game_state_,"game_state");
-  getMemoryBlock(robot_state_,"robot_state");
-  getMemoryBlock(sensors_,"vision_sensors");
-  getMemoryBlock(speech_,"speech");
+  getMemoryBlock(frame_info_, "vision_frame_info");
+  getMemoryBlock(game_state_, "game_state");
+  getMemoryBlock(robot_state_, "robot_state");
+  getMemoryBlock(sensors_, "vision_sensors");
+  getMemoryBlock(speech_, "speech");
+  getMemoryBlock(camera_, "camera_info");
 }
 
 void ButtonModule::processButtons() {
   int state = game_state_->state();
 
-  processButton(sensors_->values_[centerButton],0,center_);
-  processButton(sensors_->values_[bumperRL],sensors_->values_[bumperRR],right_bumper_);
-  processButton(sensors_->values_[bumperLL],sensors_->values_[bumperLR],left_bumper_);
+  processButton(sensors_->values_[centerButton], 0, center_);
+  processButton(sensors_->values_[bumperRL], sensors_->values_[bumperRR],right_bumper_);
+  processButton(sensors_->values_[bumperLL], sensors_->values_[bumperLR],left_bumper_);
+  processButton(sensors_->values_[headMiddle], 0, head_middle_);
 
   if (center_.new_result) {
     processCenterPresses();
     center_.reset();
+  }
+
+  if (head_middle_.new_result) {
+    camera_->calibrate_white_balance_ = !camera_->calibrate_white_balance_;
+    std::cout << "Head touched" << std::endl;
+    head_middle_.reset();
   }
 
   if (right_bumper_.new_result) {
@@ -89,10 +100,11 @@ void ButtonModule::processCenterPresses() {
     sayIP();
   } else if (center_.presses == 7) {
     game_state_->setState(TESTING);
-  } else if (center_.presses == 8) {
+  } else if (center_.presses == 8 or center_.presses == 2) {
     game_state_->isPenaltyKick = (not game_state_->isPenaltyKick);
     std::cout << "Changed isPenaltyKick to ";
     std::cout << (game_state_->isPenaltyKick ? "true" : "false") << std::endl;
+    speech_->say((game_state_->isPenaltyKick ? "Penalty" : "No Penalty"));
   } else {
     game_state_->lastStateChangeFromButton = true;
     if (state==PENALISED) {

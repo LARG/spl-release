@@ -1,16 +1,14 @@
 #!/bin/bash
 
-#rc-config delete connman boot
-#rc-config delete naopathe default
-#rc-config delete lighttpd default
+mv /home/nao/scripts/autoload.ini /home/nao/naoqi/preferences/autoload.ini
 
-mv /home/nao/scripts/bootprogress_100 /etc/init.d/bootprogress_100
-mv /home/nao/scripts/autoload.ini /etc/naoqi/autoload.ini
-mv /home/nao/scripts/naoqi /etc/init.d/naoqi
+ETH0_NAME=$( connmanctl services | grep -o 'ethernet\w*cable' )
+sudo connmanctl config $ETH0_NAME --ipv4 manual 11.0.1.$1 255.255.255.0
+connmanctl scan wifi
+WIFI_NAME=$( connmanctl services | grep -o 'naonet.*$' | grep -o 'wifi\w*managed_none' )
+sudo connmanctl config $WIFI_NAME --ipv4 manual 192.168.1.$1 255.255.255.0
+sudo connmanctl connect $WIFI_NAME
+touch /home/nao/robocup.conf
 
-rc-config add utwired boot
-rc-config add utwireless boot
-rc-config add bootprogress_100 boot
-rc-config add naoqi boot
-
-reboot
+# wait in case connmanctl needs a second to connect
+(sleep 2 && reboot &)

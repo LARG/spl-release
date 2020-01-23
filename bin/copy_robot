@@ -3,14 +3,19 @@
 import sys, subprocess, os
 
 baseIP = '192.168.1.%s'
-validInterfaces = ['nao','motion','vision','python', 'memory_test','scripts','color_table','configs','time']
+validInterfaces = ['nao', 'motion', 'python', 'memory_test', 'lola', 'vision',
+                   'scripts', 'color_table', 'configs', 'time']
+
+# All interfaces is the most common type of copy. Updates most code on the robot
+# but does not change color tables, start up and stop scripts, and time.
 allInterfaces = validInterfaces[:]
 allInterfaces.remove('scripts')
 allInterfaces.remove('color_table')
 allInterfaces.remove('time')
+installInterfaces = validInterfaces[:]
 
 NAO_HOME = os.getenv('NAO_HOME')
-basePath = os.path.join(NAO_HOME,'build')
+basePath = os.path.join(NAO_HOME, 'build')
 
 options = None
 
@@ -152,7 +157,7 @@ def getIP(args):
   return ip,args
 
 def main(ip,interfaces,options,robotID):
-  base = 'build/%s/%s/build-atom'
+  base = 'build/%s/%s/'
   build = 'debug' if options.debug else 'optimized' if options.optimize else 'release'
   for interface in interfaces:
     if options.verify:
@@ -161,21 +166,24 @@ def main(ip,interfaces,options,robotID):
       print 'Copying %s' % interface
     ibase = base % (build,interface)
     if interface == 'nao':
-      doFileOperations(ip,'%s/sdk/lib/libnaointerface.so' % ibase,'bin/',options)
+      doFileOperations(ip,'%s/libnaointerface.so' % ibase,'bin/',options)
 
-    elif interface in ['motion','vision','memory_test']:
-      doFileOperations(ip,'%s/sdk/bin/%s' % (ibase,interface),'bin/',options)
+    elif interface in ['motion','vision','memory_test', 'lola']:
+#      doFileOperations(ip,'%s/sdk/bin/%s' % (ibase,interface),'bin/',options)
+      doFileOperations(ip,'%s/%s' % (ibase,interface),'bin/',options)
 
     elif interface == 'python':
       doFileOperations(ip,'../core/python/','python/',options,extension="py",delete=True)
       doFileOperations(ip,'build/swig/gen/pythonswig_module.py','bin/',options)
-      doFileOperations(ip,'build/%s/pythonswig/build-atom/lib_pythonswig_module.so' % build, 'bin/',options)
+      doFileOperations(ip,'build/%s/pythonswig/lib_pythonswig_module.so' % build, 'bin/',options)
       subprocess.check_call('ssh nao@%s "ln -sf ~/bin/lib_pythonswig_module.so ~/bin/_pythonswig_module.so"' % ip,shell=True)
 
     elif interface == 'scripts':
       doFileOperations(ip,'../data/scripts/villa-st*','bin/',options)
+      doFileOperations(ip,'../data/scripts/start_*.sh','bin/',options)
       doFileOperations(ip,'../data/scripts/restart_processes.sh','bin/',options)
       doFileOperations(ip,'../data/scripts/profile_addendum.sh','bin/',options)
+      doFileOperations(ip,'../data/scripts/shorthand.sh','bin/',options)
 
     elif interface == 'color_table':
       doFileOperations(ip,'../data/current/def*.col','data/',options)
@@ -189,23 +197,26 @@ def main(ip,interfaces,options,robotID):
 
     elif interface == 'configs':
       if options.config_file:
-        doFileOperations(ip,options.config_file,'data/',options)
+        doFileOperations(ip, options.config_file, 'data/', options)
       else:
-        doFileOperations(ip,'../data/mof/test/*.mof','data/mof/test/',options)
-        print ' data/config/rswalk2014/*.cfg'
-        doFileOperations(ip,'../data/config/rswalk2014/*.pos','data/config/rswalk2014/',options)
-        print ' data/*.cal'
-        path = '../data/%s_calibration.cal' % (robotID)
+        doFileOperations(ip, '../data/mof/test/*.mof', 'data/mof/test/', options)
+        print(' data/config/rswalk2014/*.cfg')
+        doFileOperations(ip, '../data/config/rswalk2014/*.pos', 'data/config/rswalk2014/', options)
+        print(' data/calibrations/*.cal')
+        path = '../data/calibrations/%s_calibration.cal' % (robotID)
         if os.path.exists(path):
-          doFileOperations(ip,path,'data/',options)
+          doFileOperations(ip, path, 'data/calibrations/', options)
         else:
-          print '  **No calibration for %s' % (robotID)
-        print 'data/models/*'
+          print('  **No calibration for %s' % (robotID))
+        print('data/models/*')
         path = '../data/models/*'
-        doFileOperations(ip,path,'data/models/',options)
-        print 'data/gyros/*'
+        doFileOperations(ip, path, 'data/models/', options)
+        print('data/gyros/*')
         path = '../data/gyros/*'
-        doFileOperations(ip,path,'data/gyros/',options)
+        doFileOperations(ip, path, 'data/gyros/', options)
+        print('data/params/*')
+        path = 'data/params/'
+        doFileOperations(ip, '../%s*' % path, path, options)
 
     elif interface == 'time':
       cmd = '../install/setup_robot --date --ip %s' % ip
@@ -263,6 +274,8 @@ if __name__ == '__main__':
     arg = arg.lower()
     if arg == 'all' or arg == 'everything':
       interfaces.extend(allInterfaces)
+    elif arg == 'install':
+      interfaces.extend(installInterfaces)
     elif arg == "pythonswig":
       interfaces.append("python")
     else:

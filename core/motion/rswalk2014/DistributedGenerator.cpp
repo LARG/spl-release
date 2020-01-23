@@ -27,26 +27,14 @@ DistributedGenerator::DistributedGenerator(std::string path)
      requestedDive(Body::NONE) {
 
    headGenerator = (Generator*)(new HeadGenerator());
-   //if (!headGenerator)
-      //llog(FATAL) << "headGenerator is NULL!" << std::endl;
-
-   // TODO(dpad): Rewrite these ugly llogs to simply loop through bodyGenerators
-   // and print out the string name
    bodyGenerators[Body::NONE] = (Generator*)(new NullGenerator());
-   //if (!bodyGenerators[Body::NONE])
-      //llog(FATAL) << "bodyGenerators[NONE] is NULL!" << std::endl;
-
    bodyGenerators[Body::STAND] = (Generator*)(new StandGenerator(path));
-   //if (!bodyGenerators[Body::STAND])
-      //llog(FATAL) << "bodyGenerators[STAND] is NULL!" << std::endl;
-
    bodyGenerators[Body::MOTION_CALIBRATE] =
            (Generator*)(new ActionGenerator("standStraight",path));
-   //if (!bodyGenerators[Body::MOTION_CALIBRATE])
-      //llog(FATAL) << "bodyGenerators[MOTION_CALIBRATE] is NULL!" << std::endl;
-
    bodyGenerators[Body::STAND_STRAIGHT] =
            (Generator*)(new ActionGenerator("standStraight",path));
+   bodyGenerators[Body::STAND_PENALTY] =
+           (Generator*)(new ActionGenerator("standPenalty",path));
    
 //if (!bodyGenerators[Body::STAND_STRAIGHT])
       //llog(FATAL) << "bodyGenerators[STAND_STRAIGHT] is NULL!" << std::endl;
@@ -186,6 +174,10 @@ bool DistributedGenerator::isLinedUp(){return ((WalkEnginePreProcessor*)bodyGene
 void DistributedGenerator::resetLinedUp() {
   ((WalkEnginePreProcessor*)bodyGenerators[Body::WALK])->resetLinedUp();
   ((WalkEnginePreProcessor*)bodyGenerators[Body::KICK])->resetLinedUp();
+}
+      
+void DistributedGenerator::setWalkParameters(const RSWalkParameters &params){
+  ((WalkEnginePreProcessor*)bodyGenerators[Body::WALK])->setWalkParameters(params);
 }
 
 

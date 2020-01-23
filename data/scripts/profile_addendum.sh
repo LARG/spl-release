@@ -6,3 +6,7 @@ export PYTHONHOME=/usr
 alias clear='echo -en "\ec"'
 alias vim='LD_LIBRARY_PATH=/home/nao/vim/lib vim'
 export GLOG_minloglevel=2
+
+alias start='/home/nao/bin/villa-start.sh'
+alias stop='/home/nao/bin/villa-stop.sh'
+alias nao='/home/nao/bin/shorthand.sh'

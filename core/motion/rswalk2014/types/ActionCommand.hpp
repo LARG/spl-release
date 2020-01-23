@@ -58,13 +58,14 @@ namespace ActionCommand {
          MOTION_CALIBRATE,                //23
          STAND_STRAIGHT,                  //24
          LINE_UP,                         //25
+         STAND_PENALTY,                  //26
          NUM_ACTION_TYPES
       };
       ActionType actionType;
 
       // Walk/Kick Parameters
-      int forward; // How far forward (negative for backwards)  (mm)
-      int left;  // How far to the left (negative for rightwards) (mm)
+      float forward; // How far forward (negative for backwards)  (mm)
+      float left;  // How far to the left (negative for rightwards) (mm)
       float turn; // How much anti-clockwise turn (negative for clockwise) (rad)
       float power; // How much kick power (0.0-1.0)
       float bend;
@@ -81,10 +82,20 @@ namespace ActionCommand {
       };
       Foot foot;
       bool isFast;
+      bool isRotate;
       
       // Set this to true if you want the robot to do a kick that tries to kick it not straight
       // but angled, primarily to avoid an opponent straight ahead of it.
       bool misalignedKick; 
+      int kickForwardGap;
+      int kickLeftGap;
+      int kickForwardOverThreshold;
+      int kickForwardUnderThreshold;
+      int kickLeftThreshold;
+      int kickMaxForward;
+      int kickMaxLeft;
+      int kickDoneCt; 
+      float kickTurnSpeed;
 
       /**
        * Constructor for walks and kicks
@@ -102,7 +113,7 @@ namespace ActionCommand {
        */
       Body(ActionType at, int f = 0, int l = 0, float t = 0.0, float p = 1.0, 
            float bend = 15.0, float s = 1.0, float k = 0.0, Foot ft = LEFT, bool fast=false,
-           bool misalignedKick=false)
+           bool misalignedKick=false, int kfg=0.0, int klg=0.0, int kfot=15.0, int kfut=15.0, int klt=10.0, int kmf=60.0, int kml=35.0, int kdc = 1, float kts           = 0.5)
          : actionType(at),
            forward(f),
            left(l),
@@ -113,7 +124,17 @@ namespace ActionCommand {
            kickDirection(k),
            foot(ft),
            isFast(fast),
-           misalignedKick(misalignedKick) {}
+           misalignedKick(misalignedKick),
+           isRotate(false),
+           kickForwardGap(kfg),
+           kickLeftGap(klg),
+           kickForwardOverThreshold(kfot),
+           kickForwardUnderThreshold(kfut),
+           kickLeftThreshold(klt),
+           kickMaxForward(kmf),
+           kickMaxLeft(kml),
+           kickDoneCt(kdc),
+           kickTurnSpeed(kts) {} 
 
       /* Boost python makes using default arguements difficult.
        * Define an arguementless constructor to wrap
@@ -129,7 +150,16 @@ namespace ActionCommand {
            kickDirection(0),
            foot(LEFT),
            isFast(false),
-           misalignedKick(false) {}
+           misalignedKick(false),
+           kickForwardGap(0.0),
+           kickLeftGap(0.0),
+           kickForwardOverThreshold(15.0),
+           kickForwardUnderThreshold(15.0),
+           kickLeftThreshold(10.0),
+           kickMaxForward(60.0),
+           kickMaxLeft(35.0), 
+           kickDoneCt(1.0),
+           kickTurnSpeed(0.5) {}
 
       template<class Archive>
       void serialize(Archive &ar, const unsigned int file_version) {

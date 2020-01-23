@@ -12,7 +12,7 @@ const float LINE_WIDTH = 50;              // Rules: Item C
 const float PENALTY_MARK_SIZE = 106;      // Rules: Item D
 const float PENALTY_X =  600;             // Rules: Item E
 const float PENALTY_Y = 2200;             // Rules: Item F
-const float PENALTY_MARK_DISTANCE = 1800; // Rules: Item G
+const float PENALTY_MARK_DISTANCE = 1300; // Rules: Item G
 const float CIRCLE_DIAMETER = 1500;       // Rules: Item H
 const float BORDER_STRIP_WIDTH = 300;     // Rules: Item I
 
@@ -130,11 +130,11 @@ const vector<Point2D> lineLocationStarts = {
   intersectionLocation[WO_OWN_PEN_RIGHT_L   - INTERSECTION_OFFSET],    // WO_OWN_PENALTY
   intersectionLocation[WO_OWN_FIELD_RIGHT_L - INTERSECTION_OFFSET],    // WO_OWN_GOAL_LINE
 
-  intersectionLocation[WO_OWN_FIELD_EDGE_TOP_L - INTERSECTION_OFFSET],
-  intersectionLocation[WO_OPP_FIELD_EDGE_TOP_L - INTERSECTION_OFFSET],
+  intersectionLocation[WO_OWN_FIELD_EDGE_TOP_L - INTERSECTION_OFFSET],  // WO_OWN_FIELD_EDGE
+  intersectionLocation[WO_OPP_FIELD_EDGE_TOP_L - INTERSECTION_OFFSET],  // WO_OPP_FIELD_EDGE
 
-  intersectionLocation[WO_OPP_BACK_RIGHT_GOAL_L - INTERSECTION_OFFSET],
-  intersectionLocation[WO_OWN_BACK_RIGHT_GOAL_L - INTERSECTION_OFFSET],
+  intersectionLocation[WO_OPP_BACK_RIGHT_GOAL_L - INTERSECTION_OFFSET], // WO_OPP_BOTTOM_GOALBAR
+  intersectionLocation[WO_OWN_BACK_RIGHT_GOAL_L - INTERSECTION_OFFSET], // WO_OWN_BOTTOM_GOALBAR
 
   // VERTICAL LINES
   intersectionLocation[WO_OPP_FIELD_LEFT_L  - INTERSECTION_OFFSET],    // WO_TOP_SIDE_LINE
@@ -144,8 +144,8 @@ const vector<Point2D> lineLocationStarts = {
   intersectionLocation[WO_OWN_PEN_LEFT_L    - INTERSECTION_OFFSET],    // WO_PENALTY_BOTTOM_OWN
   intersectionLocation[WO_OPP_FIELD_RIGHT_L - INTERSECTION_OFFSET],    // WO_BOTTOM_SIDE_LINE
 
-  intersectionLocation[WO_OWN_FIELD_EDGE_TOP_L - INTERSECTION_OFFSET],
-  intersectionLocation[WO_OWN_FIELD_EDGE_BOTTOM_L - INTERSECTION_OFFSET],
+  intersectionLocation[WO_OWN_FIELD_EDGE_TOP_L - INTERSECTION_OFFSET],    // WO_TOP_FIELD_EDGE
+  intersectionLocation[WO_OWN_FIELD_EDGE_BOTTOM_L - INTERSECTION_OFFSET], // WO_BOTTOM_FIELD_EDGE
 
   intersectionLocation[WO_OPP_BACK_LEFT_GOAL_L  - INTERSECTION_OFFSET], // WO_OPP_LEFT_GOALBAR
   intersectionLocation[WO_OPP_BACK_RIGHT_GOAL_L - INTERSECTION_OFFSET], // WO_OPP_RIGHT_GOALBAR
@@ -163,11 +163,11 @@ const vector<Point2D> lineLocationEnds = {
   intersectionLocation[WO_OWN_PEN_LEFT_L    - INTERSECTION_OFFSET],    // WO_OWN_PENALTY
   intersectionLocation[WO_OWN_FIELD_LEFT_L  - INTERSECTION_OFFSET],    // WO_OWN_GOAL_LINE
   
-  intersectionLocation[WO_OWN_FIELD_EDGE_BOTTOM_L - INTERSECTION_OFFSET],
-  intersectionLocation[WO_OPP_FIELD_EDGE_BOTTOM_L - INTERSECTION_OFFSET],
+  intersectionLocation[WO_OWN_FIELD_EDGE_BOTTOM_L - INTERSECTION_OFFSET], // WO_OWN_FIELD_EDGE
+  intersectionLocation[WO_OPP_FIELD_EDGE_BOTTOM_L - INTERSECTION_OFFSET], // WO_OPP_FIELD_EDGE
   
-  intersectionLocation[WO_OPP_BACK_LEFT_GOAL_L - INTERSECTION_OFFSET], // opp back goalbar
-  intersectionLocation[WO_OWN_BACK_LEFT_GOAL_L - INTERSECTION_OFFSET], // own back goalbar
+  intersectionLocation[WO_OPP_BACK_LEFT_GOAL_L - INTERSECTION_OFFSET], // WO_OPP_BOTTOM_GOALBAR
+  intersectionLocation[WO_OWN_BACK_LEFT_GOAL_L - INTERSECTION_OFFSET], // WO_OWN_BOTTOM_GOALBAR
 
   // VERTICAL LINES
   intersectionLocation[WO_OWN_FIELD_RIGHT_L - INTERSECTION_OFFSET],    // WO_TOP_SIDE_LINE
@@ -177,8 +177,8 @@ const vector<Point2D> lineLocationEnds = {
   intersectionLocation[WO_OWN_PEN_LEFT_T    - INTERSECTION_OFFSET],    // WO_PENALTY_BOTTOM_OWN
   intersectionLocation[WO_OWN_FIELD_LEFT_L  - INTERSECTION_OFFSET],    // WO_BOTTOM_SIDE_LINE
   
-  intersectionLocation[WO_OPP_FIELD_EDGE_TOP_L - INTERSECTION_OFFSET],
-  intersectionLocation[WO_OPP_FIELD_EDGE_BOTTOM_L - INTERSECTION_OFFSET],
+  intersectionLocation[WO_OPP_FIELD_EDGE_TOP_L - INTERSECTION_OFFSET],    // WO_TOP_FIELD_EDGE
+  intersectionLocation[WO_OPP_FIELD_EDGE_BOTTOM_L - INTERSECTION_OFFSET], // WO_BOTTOM_FIELD_EDGE
 
   intersectionLocation[WO_OPP_FRONT_LEFT_GOAL_T  - INTERSECTION_OFFSET], // WO_OPP_LEFT_GOALBAR
   intersectionLocation[WO_OPP_FRONT_RIGHT_GOAL_T - INTERSECTION_OFFSET], // WO_OPP_RIGHT_GOALBAR

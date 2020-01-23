@@ -1,6 +1,8 @@
 #pragma once
 
 #include "Generator.hpp"
+#include <motion/RSWalkParameters.h>
+
 
 class ClippedGenerator : Generator {
    public:
@@ -18,9 +20,9 @@ class ClippedGenerator : Generator {
       bool isLinedUp();
       void resetLinedUp();
       void reset();
-      void readOptions(std::string path); //const boost::program_options::variables_map &config);
+      void readOptions(std::string path);
+      void setWalkParameters(const RSWalkParameters &params);
 
-   public: // made public -Josiah
       Generator* generator;
       JointValues old_j;
       bool old_exists;

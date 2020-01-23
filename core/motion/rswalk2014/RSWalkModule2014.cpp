@@ -14,7 +14,6 @@
 #include "BodyModel.hpp"
 
 #include <memory/BodyModelBlock.h>
-#include <memory/WorldObjectBlock.h>//for rswalk2014
 #include <memory/FrameInfoBlock.h>
 #include <memory/JointBlock.h>
 #include <memory/JointCommandBlock.h>
@@ -36,20 +35,7 @@
 #define ODOMETRY_LAG 8
 
 #define DEBUG_OUTPUT false
-#define GSL_COLLECT_DATA false
-
-enum FootSensorRegion
-{
-    left_front,
-    left_back,
-    left_right,
-    left_left,
-    right_front,
-    right_back,
-    right_right,
-    right_left,
-    none
-};
+#define DEBUG_PRINT(arg1, arg2, arg3, arg4) if (DEBUG_OUTPUT) std::cout << arg1 << arg2 << arg3 << arg4 << std::endl;
 
 
 /*-----------------------------------------------------------------------------
@@ -57,483 +43,315 @@ enum FootSensorRegion
 This would be like processFrame() function as in our code
 *---------------------------------------------------------------------------*/
 void RSWalkModule2014::processFrame() {
+  
+  // Set walk engine with the latest parameters
+  if (walk_params_->send_params_) {
+    std::cout << "[RSWalkModule2014::processFrame]: setting walk parameters.";
+    std::cout << std::endl;
+    if (walk_params_->use_sprint_params_)
+      clipper->setWalkParameters(walk_params_->sprint_params_);
+    else
+      clipper->setWalkParameters(walk_params_->main_params_);
+    walk_params_->send_params_ = false;
+  }
 
+  // If we are changing commands we need to reset generators
+  if(walk_request_->motion_ != prev_command_ && !walk_request_->perform_kick_ and
+     (not isRequestForWalk(walk_request_->motion_) or not isRequestForWalk(prev_command_))) {
+    DEBUG_PRINT("RESETTING GENERATORS! ",
+                WalkRequestBlock::getName(walk_request_->motion_),
+                " != ", WalkRequestBlock::getName(prev_command_))
+    standing = true;
+  }
 
-	// If we are changing commands we need to reset generators
-	if(walk_request_->motion_ != prev_command && !walk_request_->perform_kick_){
-	    if(DEBUG_OUTPUT) cout << "RESETTING GENERATORS! " << WalkRequestBlock::getName(walk_request_->motion_) << " != " << WalkRequestBlock::getName(prev_command) << "\n";
-		standing = true;
-	}
+  if (prev_walk_control_ == WALK_CONTROL_OFF and
+      walk_request_->walk_control_status_ == WALK_CONTROL_SET) {
+    cout << "walk received control, ";
+    cout << "Foot: " << (walk_request_->kick_with_left_ ? "LEFT" : "RIGHT");
+    cout << endl;
+  } else if (prev_walk_control_ == WALK_CONTROL_SET and
+             walk_request_->walk_control_status_ != WALK_CONTROL_SET) {
+    cout << "Completed walk control last frame" << endl;
+    clipper->resetLinedUp();
+  }
+  prev_walk_control_ = walk_request_->walk_control_status_;  
 
-        static WalkControl twalk = WALK_CONTROL_OFF;
-	if (twalk == WALK_CONTROL_OFF && walk_request_->walk_control_status_ == WALK_CONTROL_SET) {
-		cout << "walk received control, ";
-		cout << "Foot: " << (walk_request_->kick_with_left_ ? "LEFT" : "RIGHT") << endl;
-	} else if (twalk == WALK_CONTROL_SET and not (walk_request_->walk_control_status_ == WALK_CONTROL_SET)) {
-		cout << "Completed walk control last frame" << endl;
-	        clipper->resetLinedUp();
-	}
-	twalk = walk_request_->walk_control_status_;	
+  // Setting walk kick parameters in bodyModel
+  bodyModel.walkKick = walk_request_->perform_kick_;
+  bodyModel.walkKickLeftLeg = walk_request_->kick_with_left_;
+  bodyModel.walkKickHeading = walk_request_->kick_heading_;
 
-	// Setting walk kick parameters in bodyModel
-        bodyModel.walkKick = walk_request_->perform_kick_;
-        bodyModel.walkKickLeftLeg = walk_request_->kick_with_left_;
-        bodyModel.walkKickHeading = walk_request_->kick_heading_;
+  // 1. Need odometry to send to WalkGenerator. makeJoints updates odometry for localization
+  Odometry odo = Odometry(odometry_->displacement.translation.x,
+                          odometry_->displacement.translation.y,
+                          odometry_->displacement.rotation);
+  Odometry prev = Odometry(odo);  // Copy for after makeJoints call
 
-	// 1. Need odometry to send to WalkGenerator. makeJoints updates odometry for localization
-	Odometry odo = Odometry(odometry_->displacement.translation.x, odometry_->displacement.translation.y, odometry_->displacement.rotation);
-	Odometry prev = Odometry(odo); // Another copy for after makeJoints call
+  // 1.1 Get ball position relative to robot - this will be changed to a
+  // target position for line-up
+  float ballX = 0;
+  float ballY = 0;
+  // DEBUG_PRINT("BallX: ", ballX, " BallY: ", ballY);
 
-        // 1.1 Get ball position relative to robot - this will be changed to a target position for line-up
-        // This is for lining up to the ball
-        WorldObject* ball = &(world_objects_->objects_[WO_BALL]); //ball->loc.x (after localization)
-        double ballX = ball->relPos.x;
-        double ballY = ball->relPos.y;
-        if(DEBUG_OUTPUT) cout << "BallX: "<<ballX<<" BallY: "<<ballY<<endl;
+  // 2. Convert our request to runswift request
+  ActionCommand::Head head;  // Use default head. Not using HeadGenerator
+  ActionCommand::Body body;
+  body.actionType = ActionCommand::Body::WALK;
+  body.forward = 0; body.left = 0; body.turn=0;
+  body.power = 1;
+  body.bend = 1;
 
+  DEBUG_PRINT("Requested: ", WalkRequestBlock::getName(walk_request_->motion_), "", "");
+  if (walk_request_->motion_ == WalkRequestBlock::STAND_PENALTY) {
+    body.actionType = ActionCommand::Body::STAND_PENALTY;
+  } else if (walk_request_->motion_ == WalkRequestBlock::STAND) {
+    // Do nothing for bent-leg stand
+  } else if (walk_request_->motion_ == WalkRequestBlock::STAND_STRAIGHT) {
+    body.power = 1;
+    body.bend = 0;
+  } else if (walk_request_->motion_ == WalkRequestBlock::WALK) {
+    body.forward = walk_request_->speed_.translation.x;
+    body.left = walk_request_->speed_.translation.y;
+    body.turn = walk_request_->speed_.rotation;
+    // std::cout << body.forward << " " << walk_request_->speed_.translation.x << std::endl;
+    if (walk_params_->use_sprint_params_)
+      body.speed = walk_params_->sprint_params_.speed;
+    else
+      body.speed = walk_params_->main_params_.speed;
 
-	// 2. Convert our request to runswift request
-	// 2.1 Head
-	ActionCommand::Head head; // Use default head. Not using HeadGenerator
+    body.isRotate = walk_request_->is_rotate_;
+    bodyModel.walkKick = false;
+    if (walk_request_->perform_kick_ and walk_request_->walk_control_status_ == WALK_CONTROL_SET) {
+      body.actionType = ActionCommand::Body::KICK;
+      body.speed = 1.0;
+      // KICK COMMANDS
+      setBodyForKick(body, ballX, ballY);
+      bodyModel.walkKick = true;
+    }
 
-	// 2.2 Body
-	ActionCommand::Body body;
+  } else if (walk_request_->motion_ == WalkRequestBlock::LINE_UP) {
 
-	if (walk_request_->motion_ == WalkRequestBlock::STAND)
-	{
-		if(DEBUG_OUTPUT) cout << "Requested: STANDUP\n";
-		body.actionType = ActionCommand::Body::STAND; 
-		body.forward = 0;
-		body.left = 0;
-		body.turn = 0;
-		body.isFast = false; 
-		body.bend = 1;
-		body.power = 1;
-	}
-	else if (walk_request_->motion_ == WalkRequestBlock::STAND_STRAIGHT)
-	{
-		if (DEBUG_OUTPUT) cout << "Requested: STANDSTRAIGHT\n";
-		body.actionType = ActionCommand::Body::STAND_STRAIGHT;
-		body.forward = 0;
-		body.left = 0;
-		body.turn = 0;
-		body.isFast = false;
-		body.bend = 0;
-		body.power = 0;
-	} else if (walk_request_->motion_ == WalkRequestBlock::WALK) {	
+    body.actionType = ActionCommand::Body::LINE_UP;
+    body.forward = walk_request_->speed_.translation.x;
+    body.left = walk_request_->speed_.translation.y;
+    body.turn = walk_request_->target_point_.rotation;
+    body.speed = 1.0;
+    setBodyForKick(body, ballX, ballY);
 
-		if(DEBUG_OUTPUT) cout << "Requested: WALK\n";
-		body.actionType = ActionCommand::Body::WALK;
-		body.forward = walk_request_->speed_.translation.x * walk_params_->rs_params_.speedMax.translation.x;
-		body.left = walk_request_->speed_.translation.y * walk_params_->rs_params_.speedMax.translation.y;
-		body.turn = walk_request_->speed_.rotation * walk_params_->rs_params_.speedMax.rotation;
-		body.bend = 1;
-		body.power = 1;
-		body.speed = walk_params_->rs_params_.speed;
-		body.isFast = false;
+    if (walk_request_->walk_control_status_ != WALK_CONTROL_SET) {
+      DEBUG_PRINT("Still lining up but lineup done... ",
+                  walk_request_->walk_control_status_, "", "");
+      DEBUG_PRINT("BallX: ", ballX, " BallY: ", ballY);
+      toStandRequest(body, false);
+    }
+    if (clipper->isLinedUp() && walk_request_->walk_control_status_ == WALK_CONTROL_SET) {
+      std::cout << "Line up complete" << std::endl;
+      toStandRequest(body, false);
+      kick_request_->finished_with_step_ = true;
+      walk_request_->walk_control_status_ = WALK_CONTROL_DONE;
+    }
+  } else if (walk_request_->motion_ == WalkRequestBlock::NONE or
+             walk_request_->motion_ == WalkRequestBlock::WAIT) {
+    body.actionType = ActionCommand::Body::NONE;
+  } else {
+    // Default to tall straight stand
+    body.bend = 0;
+  }
 
-		if (bodyModel.walkKick and walk_request_->walk_control_status_ == WALK_CONTROL_SET) {//target_walk_active_) {
-			body.actionType = ActionCommand::Body::KICK;
-                        body.speed = 1.0;//7.0 * DEG_T_RAD;
-			ballX = walk_request_->target_point_.translation.x;
-			ballY = walk_request_->target_point_.translation.y;
-			if (bodyModel.walkKickLeftLeg) body.foot = ActionCommand::Body::LEFT;
-			else body.foot = ActionCommand::Body::RIGHT;
-		} else {
-			bodyModel.walkKick = false;
-		} 
+  if (not body_model_->feet_on_ground_ and
+    body.actionType != ActionCommand::Body::NONE) {
+    // Need something here so robot stops when picked up
+    // body.actionType = ActionCommand::Body::REF_PICKUP;
+    toStandRequest(body, false);
+  }
 
-	} else if (walk_request_->motion_ == WalkRequestBlock::LINE_UP) {
-		body.actionType = ActionCommand::Body::LINE_UP;
-                body.forward = walk_request_->speed_.translation.x * walk_params_->rs_params_.speedMax.translation.x;
-                body.left = walk_request_->speed_.translation.y * walk_params_->rs_params_.speedMax.translation.y;
-                body.turn = walk_request_->speed_.rotation * walk_params_->rs_params_.speedMax.rotation;
-                body.bend = 1;
-		body.power = 1;
-                body.speed = 1.0;//5.0 * DEG_T_RAD;
-                body.isFast = false;
-		ballX = walk_request_->target_point_.translation.x;
-		ballY = walk_request_->target_point_.translation.y;
-		body.turn = walk_request_->target_point_.rotation;
+  // 2.3 LEDs and Sonar -- Not important, use defaults
+  ActionCommand::LED leds;
+  float sonar = 0.0;
 
-		if (walk_request_->kick_with_left_) body.foot = ActionCommand::Body::LEFT;
-		else body.foot = ActionCommand::Body::RIGHT;
-		//cout << "Line up foot: " << (body.foot == ActionCommand::Body::LEFT ? "LEFT" : "RIGHT") << endl;
-                if (walk_request_->walk_control_status_ != WALK_CONTROL_SET) {
-                  if(DEBUG_OUTPUT) cout << "Still lining up but lineup done... " << walk_request_->walk_control_status_ << " " << ballX << " " << ballY << endl;
-                  body.actionType = ActionCommand::Body::STAND;
-		  body.bend = 1;
-		  body.forward = 0;
-		  body.left = 0;
-                  body.turn =0;
-		}
-		if (clipper->isLinedUp() && walk_request_->walk_control_status_ == WALK_CONTROL_SET) { //target_walk_is_active_) {
-			cout << "Line up complete" << endl;
-			body.actionType = ActionCommand::Body::STAND;
-			body.bend = 1;
-		        body.forward = 1;
-			body.left = 0;
-        	        body.turn =0;
-                	//walk_request_->target_walk_is_active_ = false;
-			kick_request_->finished_with_step_ = true;
-			walk_request_->walk_control_status_ = WALK_CONTROL_DONE;
-		} 
-	} else if (walk_request_->motion_ == WalkRequestBlock::NONE || walk_request_->motion_ == WalkRequestBlock::WAIT)
-	{
-		if(DEBUG_OUTPUT) cout << "Requested: " << WalkRequestBlock::getName(walk_request_->motion_) << "\n";
-		body.actionType = ActionCommand::Body::ActionType::NONE;
-		body.forward = 0;
-		body.bend = 1;
-		body.left = 0;
-		body.turn = 0;
-		body.isFast = false;
-	}
-	else{
-		if(DEBUG_OUTPUT) cout << "Other Request: " << walk_request_->motion_ << endl; 
-		body.actionType = ActionCommand::Body::ActionType::STAND;
-		body.forward = 0;
-		body.left = 0;
-		body.turn = 0;
-		body.isFast = false;			
-	}
+  // Now we have everything we need for a runswift request
+  ActionCommand::All request(head, body, leds, sonar);
 
+  // 3. Create runswift sensor object
+  SensorValues sensors;
 
-        if(!body_model_->feet_on_ground_ && body.actionType != ActionCommand::Body::ActionType::NONE)
-        {
-                // Need something here so robot stops when picked up
-		body.actionType = ActionCommand::Body::ActionType::REF_PICKUP;
-        }
+  // 3.1 Sense Joints 
+  for (int ut_ind = 0; ut_ind < NUM_JOINTS; ut_ind++){
+    if (ut_ind != RHipYawPitch) {  // RS does not have this joint because RHYP is same as LHYP on Nao
+      int rs_ind = utJointToRSJoint[ut_ind];
+      sensors.joints.angles[rs_ind] = joints_->values_[ut_ind] * robot_joint_signs[ut_ind];
+      sensors.joints.temperatures[rs_ind] = joints_->temperature_[ut_ind];
+    }
+  }
 
-	// 2.3 LEDs and Sonar
-	ActionCommand::LED leds; // Not important, use defaults - Josiah
-        float sonar = 0.0;
+  // Detect if legs are getting hot
+  if(joints_->temperature_[RKneePitch] > 100 or joints_->temperature_[RHipPitch] > 100)
+    bodyModel.isRightLegHot = true;
+  if(joints_->temperature_[LKneePitch] > 100 or joints_->temperature_[LHipPitch] > 100)
+    bodyModel.isLeftLegHot = true;
 
-	// Now we have everything we need for a runswift request
-	ActionCommand::All request(head,body,leds,sonar);
+  // 3.2 Sensors
+  for (int ut_ind = 0; ut_ind < bumperRR + 1; ut_ind++){
+    int rs_ind = utSensorToRSSensor[ut_ind];
+    sensors.sensors[rs_ind] = sensors_->values_[ut_ind];
+  }
 
-	// 3. Create runswift sensor object
-	SensorValues sensors;
+  // 4. If robot is remaining still, calbrate x and y gyroscopes
+  bool not_calibrated = updateGyroScopeCalibration(sensors.sensors[RSSensors::InertialSensor_GyrX],
+                                                  sensors.sensors[RSSensors::InertialSensor_GyrY]);
+  odometry_->walkDisabled = not_calibrated;
+  // After each gyro has completed two cycles it is calibrated.
+  if (calX_count >= 2)
+    bodyModel.isGyroXCalibrated = true;
+  if (calY_count >= 2)
+    bodyModel.isGyroYCalibrated = true;
 
-	// 3.1 Sense Joints 
-	for (int ut_ind=0; ut_ind<NUM_JOINTS; ut_ind++){
-		if (ut_ind != RHipYawPitch){ // RS does not have this joint because RHYP is same as LHYP on Nao
-			int rs_ind = utJointToRSJoint[ut_ind];
-			sensors.joints.angles[rs_ind] = joints_->values_[ut_ind] * robot_joint_signs[ut_ind]; // changed from raw_joints - Josiah
-			sensors.joints.temperatures[rs_ind] = sensors_->joint_temperatures_[ut_ind];
-		}
-	}
+  // Apply offset and convert from rad/sec to rad /frame
+  // sensors.sensors[RSSensors::InertialSensor_GyrX] = (sensors.sensors[RSSensors::InertialSensor_GyrX] - offsetX) * 0.012;
+  // sensors.sensors[RSSensors::InertialSensor_GyrY] = (sensors.sensors[RSSensors::InertialSensor_GyrY] - offsetY) * 0.012;
+  // Take out gyroXY offsets for V6, also don't divide by frame numbers because lola returns per frame value
 
-	// Detect if legs are getting hot
-	if(sensors_->joint_temperatures_[RKneePitch] > 100 || sensors_->joint_temperatures_[RHipPitch] > 100)
-		bodyModel.isRightLegHot = true;
-	if(sensors_->joint_temperatures_[LKneePitch] > 100 || sensors_->joint_temperatures_[LHipPitch] > 100)
-		bodyModel.isLeftLegHot = true;
+  // 5. Prepare BodyModel to pass to makeJoints
+  // 5.1 Get Kinematics ready for bodyModel. We should figure out what parameter values should be.
+  kinematics.setSensorValues(sensors); 
+  // TODO apply camera calibrations to kinematics. For now we use default of 0
+  //  kinematics.parameters.cameraPitchTop=2.4;
+  //  kinematics.parameters.cameraYawTop=sensors_->values_[HeadYaw];
+  //  kinematics.parameters.cameraRollTop=0;
+  //  kinematics.parameters.cameraYawBottom=sensors_->values_[HeadPitch];
+  //  kinematics.parameters.cameraPitchBottom=sensors_->values_[HeadYaw];
+  //  kinematics.parameters.cameraRollBottom=0;
+  //  kinematics.parameters.bodyPitch=3.3;//sensors_->values_[angleY];
+  kinematics.updateDHChain();
 
-	// 3.2 Sensors
-	for (int ut_ind=0; ut_ind<bumperRR + 1; ut_ind++){
-		int rs_ind = utSensorToRSSensor[ut_ind];
-		sensors.sensors[rs_ind] = sensors_->values_[ut_ind];
-	}
+  // Resetting generators and moving to intermediate stance
+  if (standing) {
 
-	
-	// 4. If robot is remaining still, calbrate x and y gyroscopes
-	// 4.1 Calibrate gyroX:
-	double cur_gyroX = sensors.sensors[RSSensors::InertialSensor_GyrX];
-//        cout << cur_gyroX << " " << sensors.sensors[RSSensors::InertialSensor_GyrY] << " " << sensors.sensors[RSSensors::InertialSensor_AccX] << " " << sensors.sensors[RSSensors::InertialSensor_AccY] << endl;
-	double delta_gyroX = abs(cur_gyroX - last_gyroX);
-	// maintain moving averages for gyro and delta_gyro
-	avg_gyroX = avg_gyroX * (1.0 - window_size) + cur_gyroX * window_size;
-	avg_delta_gyroX = avg_delta_gyroX * (1.0- window_size) + delta_gyroX * window_size;
-        //cout << "gyroX: " << cur_gyroX << endl;
- 	if (avg_delta_gyroX < delta_threshold) {
-		// robot remains still, do calibration
-		offsetX = avg_gyroX;
-		// reset avg_delta so it does not keep recalibrating
-		avg_delta_gyroX = reset;
-		calX_count += 1; 
-		if (calX_count == 1) {
-                  cout << "(First calibration, may not be accurate) A GyroX calibration was triggered, offsetX set to: " << offsetX << endl;
-		}
-		else {
-		  cout << "A GyroX calibration was triggered, offsetX set to: " << offsetX << endl;
-		}
-		last_gyroX_time = frame_info_-> seconds_since_start;
-	}
-	else {
-		if (DEBUG_OUTPUT) cout << "avg_delta_gyroX is: " << avg_delta_gyroX <<  " GyroX not stable, no calibration" << endl;
-	}
+    if (prev_command_ == WalkRequestBlock::LINE_UP || walk_request_->motion_ == WalkRequestBlock::LINE_UP) {
+      clipper->resetLinedUp();
+      standing = false;
+      if (walk_request_->motion_ == WalkRequestBlock::STAND || walk_request_->motion_ == WalkRequestBlock::STAND_STRAIGHT || walk_request_->motion_ == WalkRequestBlock::NONE)
+        standing = true;
+    }
+    if (standing) {
+      clipper->reset();
+      DEBUG_PRINT("Resetting clipper", "", "", "");
+      request.body = ActionCommand::Body::INITIAL;
+      odo.clear();
+    }
+  }
 
-      	last_gyroX = cur_gyroX;
+  // 5.2 update bodyModel
+  bodyModel.kinematics = &kinematics;
 
-	// 4.2 Calibrate gyroY:
-	double cur_gyroY = sensors.sensors[RSSensors::InertialSensor_GyrY];
-	double delta_gyroY = abs(cur_gyroY - last_gyroY);
-	// maintain moving averages for gyro and delta_gyro
-	avg_gyroY = avg_gyroY * (1.0 - window_size) + cur_gyroY * window_size;
-	avg_delta_gyroY = avg_delta_gyroY * (1.0- window_size) + delta_gyroY * window_size;
- 	if (avg_delta_gyroY < delta_threshold) {
-		// robot remains still, do calibration
-		offsetY = avg_gyroY;
-		// reset avg_delta so it does not keep recalibrating
-		avg_delta_gyroY = reset;
-		calY_count += 1;
-		if (calY_count == 1) {
-                  cout << "(First calibration, may not be accurate) A GyroY calibration was triggered, offsetY set to: " << offsetY << endl;
-		}
-		else {     
-	 	  cout << "A GyroY calibration was triggered, offsetY set to: " << offsetY << endl;
-		}
-		last_gyroY_time = frame_info_-> seconds_since_start;
-	}
-	else {
-		if (DEBUG_OUTPUT) cout << "avg_delta_gyroY is: " << avg_delta_gyroY <<  " GyroY not stable, no calibration" << endl;
-	}
+  // If a walk is requested but we are not calibrated then complain loudly.
+  if ((request.body.forward != 0 or
+       request.body.left != 0 or
+       request.body.turn != 0) and odometry_->walkDisabled) {
+    static int delay_ct = 0;
+    if (delay_ct % 100 == 0)
+      speech_->say("Not Calibrated");
+      delay_ct ++;
+    DEBUG_PRINT("Not calibrated", "", "", "");
+    // TODO: Re-enable calibration
+    // if (odometry_->standing) {
+    //   toStandRequest(request.body, true);
+    // } else {
+    //   request.body = ActionCommand::Body::NONE;
+    // }
+  }
 
-	last_gyroY = cur_gyroY;
-	
+  DEBUG_PRINT("motion request: ",
+              WalkRequestBlock::getName(walk_request_->motion_), ", prev: ",
+              WalkRequestBlock::getName(prev_command_));
+  DEBUG_PRINT("Body Request: ", static_cast<int>(request.body.actionType), "", "");
+  prev_command_ = walk_request_->motion_;
 
-	// After each gyro has completed two cycles it is calibrated.
-        //TODO: not sure whether need to put calZ_count here, since calibrating gyroZ does not affect walk;
-	if (calX_count >= 2)
-	  bodyModel.isGyroXCalibrated = true;
-	if (calY_count >= 2)
-	  bodyModel.isGyroYCalibrated = true;
-//	if (calZ_count >= 2)
-//	  bodyModel.isGyroZCalibrated = true;
+  bool requestWalkKick = bodyModel.walkKick;
+  // Call the clipped generator which calls the distributed generator to produce walks, stands, etc.
+  JointValues joints = clipper->makeJoints(&request, &odo, sensors, bodyModel, ballX, ballY);
 
-	if ((calX_count >= 2 && calY_count >= 2) || (getSystemTime() - calibration_write_time < 600))
-	{
-	  odometry_->walkDisabled = false;
-	  calX_count = 2;
-	  calY_count = 2;
-	  
-	  if (last_gyroY_time  > last_calibration_write + 30 && last_gyroX_time > last_calibration_write + 30)
-	  {
-	    calibration_write_time = getSystemTime();
-	    GyroConfig config;
-	    config.offsetX = offsetX;
-	    config.offsetY = offsetY;
-	    config.calibration_write_time = calibration_write_time;
-      auto path = util::format("%s/%i_xy.yaml", util::cfgpath(util::GyroConfigs), robot_state_->robot_id_);
-	    config.save(path);
-	    last_calibration_write = frame_info_->seconds_since_start;
-	  }
-	} else if ((calX_count < 2 || calY_count < 2 || calZ_count < 2)) {
-		odometry_->walkDisabled = true;
-	}
+  if (requestWalkKick && requestWalkKick != bodyModel.walkKick && walk_request_->walk_control_status_ == WALK_CONTROL_SET) {
+    std::cout << "Done with walk kick" << std::endl;
+    walk_kick_finish_frame_ = frame_info_->frame_id;
+    clipper->resetLinedUp();
+    walk_request_->walk_control_status_ = WALK_CONTROL_DONE;
+    target_walk_active_ = false;
+  }
 
-	// Apply offset and convert from rad/sec to rad /frame
-	sensors.sensors[RSSensors::InertialSensor_GyrX] = (sensors.sensors[RSSensors::InertialSensor_GyrX] - offsetX) * 0.01;
-	sensors.sensors[RSSensors::InertialSensor_GyrY] = (sensors.sensors[RSSensors::InertialSensor_GyrY] - offsetY) * 0.01;
-        // V5s need to calibrate Z as well
-        // cout << "gyroZ: " << sensors.sensors[RSSensors::InertialSensor_GyrRef] << endl;        
-	// sensors.sensors[RSSensors::InertialSensor_GyrRef] = (sensors.sensors[RSSensors::InertialSensor_GyrRef] - offsetZ) * 0.01;
-	
-        // 5. Prepare BodyModel to pass to makeJoints
+  // Update odometry
+  static double cum_f = 0, cum_l = 0, cum_t = 0;
+  odometry_->displacement.translation.x = odo.forward;
+  odometry_->displacement.translation.y = odo.left;
+  odometry_->displacement.rotation = odo.turn;
+  odometry_->standing = clipper->isStanding();
+  Odometry delta = Odometry(odo - prev);
+  cum_f += delta.forward;
+  cum_l += delta.left;
+  cum_t += delta.turn;
 
-	// 5.1 Get Kinematics ready for bodyModel. We should figure out what parameter values should be.
-	kinematics.setSensorValues(sensors); 
+  // Update walk_info_
+  walk_info_->instability_ = avg_gyroX;
+  if (avg_gyroX < -2 or avg_gyroX > 2) {
+    walk_info_->instable_ = true;
+  } else {
+    walk_info_->instable_ = false;
+  }
 
-	// TODO apply camera calibrations to kinematics. For now we use default of 0
-//	kinematics.parameters.cameraPitchTop=2.4;
-//	kinematics.parameters.cameraYawTop=sensors_->values_[HeadYaw];
-//	kinematics.parameters.cameraRollTop=0;
-//	kinematics.parameters.cameraYawBottom=sensors_->values_[HeadPitch];
-//	kinematics.parameters.cameraPitchBottom=sensors_->values_[HeadYaw];
-//	kinematics.parameters.cameraRollBottom=0;
-//	kinematics.parameters.bodyPitch=3.3;//sensors_->values_[angleY];
+  wasKicking = kick_request_->kick_running_;
 
-	kinematics.updateDHChain();
+  if (request.body.actionType == ActionCommand::Body::NONE) {
+    return;
+  }
 
-	// Resetting generators and moving to intermediate stance
-        if (standing){
+  // Convert RS joints to UT joints and write to commands memory block
+  for (int ut_ind = BODY_JOINT_OFFSET; ut_ind < NUM_JOINTS; ut_ind++) {
+    if (ut_ind != RHipYawPitch) { // RS does not have this joint
+      int rs_ind = utJointToRSJoint[ut_ind];
+      commands_->angles_[ut_ind] = robot_joint_signs[ut_ind] * joints.angles[rs_ind];
+      commands_->stiffness_[ut_ind] = joints.stiffnesses[rs_ind];
+    } 
+  }
 
-	  if (prev_command == WalkRequestBlock::LINE_UP || walk_request_->motion_ == WalkRequestBlock::LINE_UP) {
-	    clipper->resetLinedUp();
-	    standing = false;
-	    if (walk_request_->motion_ == WalkRequestBlock::STAND || walk_request_->motion_ == WalkRequestBlock::STAND_STRAIGHT || walk_request_->motion_ == WalkRequestBlock::NONE)
-		standing = true;
-	  } 
-          if(standing) {
-            clipper->reset();
-//          clipper->resetLinedUp();
-	    if(DEBUG_OUTPUT) cout << "Resetting clipper" << endl;
-            request.body = ActionCommand::Body::INITIAL;
-            odo.clear();
-	  }
-        }
+  commands_->stiffness_[RHipYawPitch] = commands_->stiffness_[LHipYawPitch];
+  commands_->angles_[RHipYawPitch] = commands_->angles_[LHipYawPitch];
 
+  // Walk keeps falling backwards when knees over 100. Leaning forward helps some
+  if (request.body.actionType == ActionCommand::Body::STAND and
+      (bodyModel.isLeftLegHot || bodyModel.isRightLegHot)) {
+    commands_->angles_[RHipPitch] -= DEG_T_RAD * 2;
+    commands_->angles_[LHipPitch] -= DEG_T_RAD * 2;
+  }
+  
+  // if the robot has walked, listen to arm command from WalkGenerator, else do stiffness
+  if (request.body.actionType != ActionCommand::Body::WALK) {
+    for (int ind = ARM_JOINT_FIRST; ind <= ARM_JOINT_LAST; ind ++)
+      commands_->stiffness_[ind] = 1.0;
+  }
 
-	// 5.2 update bodyModel
-	bodyModel.kinematics = &kinematics;
-	bodyModel.update(&odo, sensors);
-	
-	
-        if (request.body.actionType == ActionCommand::Body::WALK && odometry_->walkDisabled){
-		static int delay_ct = 0;
-		if (delay_ct % 100 == 0)//prev_command != walk_request_->motion_)
-		  speech_->say("Not Calibrated");
-	        delay_ct ++;
-		if(DEBUG_OUTPUT) cout << "Not calibrated" << endl;
-		if (odometry_->standing)
-			request.body = ActionCommand::Body::STAND;
-		else
-			request.body = ActionCommand::Body::NONE;
-	}
-
-	  if(DEBUG_OUTPUT) printf("motion request: %s, prev: %s, body request: %i\n", WalkRequestBlock::getName(walk_request_->motion_), WalkRequestBlock::getName(prev_command), static_cast<int>(request.body.actionType));
-        prev_command = walk_request_->motion_;
-
-	bool requestWalkKick = bodyModel.walkKick;
-	// Call the clipped generator which calls the distributed generator to produce walks, stands, etc.
-	JointValues joints = clipper->makeJoints(&request, &odo, sensors, bodyModel, ballX, ballY);
-        if (requestWalkKick && requestWalkKick != bodyModel.walkKick && walk_request_->walk_control_status_ == WALK_CONTROL_SET) {//target_walk_is_active_) {
-		cout << "Done with walk kick" << endl;
-		walk_kick_finish_frame_ = frame_info_->frame_id; 
-	        clipper->resetLinedUp();
-//                walk_request_->target_walk_is_active_ = false;
-		walk_request_->walk_control_status_ = WALK_CONTROL_DONE;
-		target_walk_active_ = false;
-        } //else if(not target_walk_active_) { walk_request_->target_walk_is_active_ = false;}
-        	
-
-//	static int point_id_ = 0;
-	if (GSL_COLLECT_DATA && request.body.actionType == ActionCommand::Body::WALK)
-        	writeDataToFile(sensors,joints);
-//	point_id_ ++;
-
-	// We aren't setting arms any more so this isn't important unless we go back to it
-	// Setting arms behind back makes us get caught less but then we can't counter balance rswalk
-	if ((frame_info_->seconds_since_start - last_walk_or_stand_) > 0.3) {
-		arm_state_ = -1;
-	}
-
-        // Update odometry
-	static double cum_f=0, cum_l=0, cum_t=0;
-        odometry_->displacement.translation.x = odo.forward;
-        odometry_->displacement.translation.y = odo.left;
-        odometry_->displacement.rotation = odo.turn;
-	//if (walk_request_->speed_.translation.x > 0.5)
-		//odometry_->displacement.rotation -= (walk_params_->bh_params_.rs_turn_angle_offset / 100.0);
-        odometry_->standing = clipper->isStanding();
-	Odometry delta = Odometry(odo - prev);
-	cum_f += delta.forward;
-	cum_l += delta.left;
-	cum_t += delta.turn;
-	// For debugging odometry
-/*	if (body.turn != 0){
-		cout << "Odometry Prev: " << prev.turn;
-		cout << " Odometry Delta: " << delta.turn;
-		cout << " Odometry: "  << odo.turn;
-		cout << " Cumulative Odometry: " << cum_t << endl;
-	}
-*/
-
-      // Update walk_info_
-        //walk_info_->walk_is_active_ = !(clipper->isStanding());
-        walk_info_->instability_ = avg_gyroX;
-        if (avg_gyroX < -2 or avg_gyroX > 2) {
-          walk_info_->instable_ = true;
-        } else {
-          walk_info_->instable_ = false;
-        }
-
-        // Update
-        wasKicking = kick_request_->kick_running_;
-
-	if (request.body.actionType == ActionCommand::Body::ActionType::NONE){
-		return;
-	}
-
-	// For setting arms
-	last_walk_or_stand_ = frame_info_->seconds_since_start;
-
-	// Convert RS joints to UT joints and write to commands memory block
-	for (int ut_ind = BODY_JOINT_OFFSET; ut_ind < NUM_JOINTS; ut_ind++) {
-		if (ut_ind != RHipYawPitch){ // RS does not have this joint
-     			int rs_ind = utJointToRSJoint[ut_ind];
-        		commands_->angles_[ut_ind] = robot_joint_signs[ut_ind] * joints.angles[rs_ind];
-    	    		commands_->stiffness_[ut_ind] = joints.stiffnesses[rs_ind];
-		} 
-   	}
-
-	// Ruohan: setting head stiffness was commented out in bhuman. Should ask Jake about this	
-  // Jake: setting stiffness here is unnecessary and means we can never turn these off for testing.
-	//commands_->stiffness_[HeadPitch] = 1.0;
-	//commands_->stiffness_[HeadYaw] = 1.0;
-	commands_->stiffness_[RHipYawPitch] = commands_->stiffness_[LHipYawPitch]; // RHYP will be overwritten with LHYP anyway but for completeness
-	commands_->angles_[RHipYawPitch] = commands_->angles_[LHipYawPitch];
-
-	// Walk keeps falling backwards when knees over 100. Leaning forward helps some
-	if (request.body.actionType == ActionCommand::Body::STAND && (bodyModel.isLeftLegHot || bodyModel.isRightLegHot)){
-		commands_->angles_[RHipPitch] -= DEG_T_RAD * 2;
-		commands_->angles_[LHipPitch] -= DEG_T_RAD * 2;
-	}
-	
-	// if the robot has walked, listen to arm command from WalkGenerator, else do stiffness
-	if (request.body.actionType != ActionCommand::Body::WALK) {
-		for (int ind = ARM_JOINT_FIRST; ind <= ARM_JOINT_LAST; ind ++)
-			commands_->stiffness_[ind] = 1.0; //0.75;
-	}
-	
-	selectivelySendStiffness(); // Only send stiffness if at least one joint has changed stiffness values by at least 0.01
-//	setArms(commands_->angles_,0.01); // Arms getting stuck on robot front with rswalk. Needs tuning
-
-	commands_->send_body_angles_ = true; // So commands will execute
-	commands_->send_stiffness_ = true;
-
-	if (request.body.actionType == ActionCommand::Body::STAND){
-		commands_->body_angle_time_ = 10; // Increase these if standing?
-		commands_->stiffness_time_ = 10; 
-	} else {
-		commands_->body_angle_time_ = 10;
-		commands_->stiffness_time_ = 10;
-
-	}
-
-	// Not doing anything with these now. Could be used in future for smoothing
-	prevForward = body.forward;
-	prevLeft = body.left;
-	prevTurn = body.turn;
-
-	// Agent Effector code?
-	// This is in rswalk agent effecter. Not sure what standing is but it works now.
-	static bool kill_standing = false;
-	standing = kill_standing;
-	if (kill_standing) {
-		kill_standing = false;
-		standing = false;
-	}
-	else{
-		kill_standing = true;
-	}
+  commands_->send_body_angles_ = true;
+  commands_->send_stiffness_ = true;
+  commands_->body_angle_time_ = 10;
+  commands_->stiffness_time_ = 10;
+  standing = false;
 
 }
+
 
 void RSWalkModule2014::readOptions(std::string path)
 {
 
-	clipper->readOptions(path);
+  clipper->readOptions(path);
 
 }
 
 RSWalkModule2014::RSWalkModule2014():
-/*    slow_stand_start(-1),
-    slow_stand_end(-1),
-    walk_requested_start_time(-1),
-    prev_kick_active_(false), */
-    arms_close_to_targets_(false),
-    arm_state_(-1),
-    arm_state_change_(-1),
-    last_walk_or_stand_(-1),
     step_into_kick_state_(NONE),
-    time_step_into_kick_finished_(0), 
+    time_step_into_kick_finished_(0),
     walk_kick_finish_frame_(-100),
     last_gyroY_time(-1),
     last_gyroX_time(-1),
-    prevForward(0),
-    prevLeft(0),
-    prevTurn(0)
+    prev_walk_control_(WALK_CONTROL_OFF)
 {
     utJointToRSJoint[HeadYaw] = RSJoints::HeadYaw;
     utJointToRSJoint[HeadPitch] = RSJoints::HeadPitch;
@@ -586,13 +404,14 @@ RSWalkModule2014::RSWalkModule2014():
     utSensorToRSSensor[bumperLR] = RSSensors::LFoot_Bumper_Right;
     utSensorToRSSensor[bumperRL] = RSSensors::RFoot_Bumper_Left;   
     utSensorToRSSensor[bumperRR] = RSSensors::RFoot_Bumper_Right;
-    // No UT Sensors for RSSensors RFoot_FSR_CenterOfPressure_X/Y, Battery_Charge or US, not sure what these are - Josiah
-
+    // No UT Sensors for RSSensors RFoot_FSR_CenterOfPressure_X/Y
+    // Battery_Charge or US, not sure what these are but Runswift has them.
 
 }
 
 RSWalkModule2014::~RSWalkModule2014() {
 }
+
 
 void RSWalkModule2014::specifyMemoryDependency() {
     requiresMemoryBlock("frame_info");
@@ -607,9 +426,7 @@ void RSWalkModule2014::specifyMemoryDependency() {
     requiresMemoryBlock("walk_param");
     requiresMemoryBlock("walk_request");
     requiresMemoryBlock("body_model");
-    requiresMemoryBlock("world_objects");//for rswalk2014
     requiresMemoryBlock("speech");
-    requiresMemoryBlock("game_state");
     requiresMemoryBlock("robot_state");
 }
 
@@ -626,11 +443,8 @@ void RSWalkModule2014::specifyMemoryBlocks() {
     getOrAddMemoryBlock(walk_params_,"walk_param");
     getOrAddMemoryBlock(walk_request_,"walk_request");
     getOrAddMemoryBlock(body_model_,"body_model");
-    getOrAddMemoryBlock(world_objects_,"world_objects");//for rswalk2014
     getOrAddMemoryBlock(speech_, "speech");
-    memory_->getBlockByName(game_state_, "game_state", MemoryOwner::VISION);
     memory_->getBlockByName(robot_state_, "robot_state", MemoryOwner::VISION);
-    memory_->getOrAddBlockByName(world_objects_,"world_objects",MemoryOwner::SHARED);//for rswalk2014
     memory_->getOrAddBlockByName(speech_,"speech",MemoryOwner::SHARED);
 }
 
@@ -640,9 +454,10 @@ void RSWalkModule2014::initSpecificModule() {
     std::string config_path = memory_->data_path_;
     config_path += "/config/rswalk2014"; 
     clipper = new ClippedGenerator((Generator*) new DistributedGenerator(config_path));
+    // clipper->reset();
     readOptions(config_path);
     standing = false;
-    prev_command = WalkRequestBlock::NONE;
+    prev_command_ = WalkRequestBlock::NONE;
     x_target = -1;
     y_target = -1;
     wasKicking = false;
@@ -656,185 +471,9 @@ void RSWalkModule2014::initSpecificModule() {
       offsetY = config.offsetY;
       calibration_write_time = config.calibration_write_time;
     }
-    if (GSL_COLLECT_DATA)
-    	outfile.open("gsl_joint_data.csv");
+
 }
 
-
-void RSWalkModule2014::writeDataToFile(SensorValues sensors, JointValues joints) {
-	outfile << "frameID=" << frame_info_->frame_id << ",";
-        // Joints 
-        for (int ut_ind=0; ut_ind<NUM_JOINTS; ut_ind++){
-        	if (ut_ind != RHipYawPitch){ // RS does not have this joint because RHYP is same as LHYP on Nao
-                	int rs_ind = utJointToRSJoint[ut_ind];
-                        outfile << RSJoints::jointNames[rs_ind] << "State=" << sensors.joints.angles[rs_ind] << ",";
-                }
-        }
-        //Sensors
-        for (int ut_ind=0; ut_ind<bumperRR + 1; ut_ind++){
-        	int rs_ind = utSensorToRSSensor[ut_ind];
-                outfile << RSSensors::sensorNames[rs_ind] << "=" << sensors.sensors[rs_ind] << ",";
-        }
-        // Joint Commands
-        for (int ut_ind = BODY_JOINT_OFFSET; ut_ind < NUM_JOINTS; ut_ind++) {
-        	if (ut_ind != RHipYawPitch){ // RS does not have this joint - Josiah
-                	int rs_ind = utJointToRSJoint[ut_ind];
-                        	outfile << RSJoints::jointNames[rs_ind] << "Command=" << robot_joint_signs[ut_ind] * joints.angles[rs_ind] << ",";
-                }
-        }
-	outfile << std::endl;
-}
-
-void RSWalkModule2014::getArmsForState(int state, Joints angles) {
-    if (state <= 1) {
-        angles[LShoulderPitch] = DEG_T_RAD * -116;
-        angles[LShoulderRoll] = DEG_T_RAD * 15;//12;
-        angles[LElbowYaw] = DEG_T_RAD * -85;
-        angles[LElbowRoll] = DEG_T_RAD * -0;
-        angles[RShoulderPitch] = DEG_T_RAD * -116;
-        angles[RShoulderRoll] = DEG_T_RAD * 15;//12;
-        angles[RElbowYaw] = DEG_T_RAD * -85;
-        angles[RElbowRoll] = DEG_T_RAD * -0;
-        if (state == 1) {
-            angles[LElbowYaw] = DEG_T_RAD * 25;
-            angles[RElbowYaw] = DEG_T_RAD * 25;
-        }
-    } else {
-        angles[LShoulderPitch] = DEG_T_RAD * -116;
-        angles[LShoulderRoll] = DEG_T_RAD * 8;//8;
-        angles[LElbowYaw] = DEG_T_RAD * 25;
-        angles[LElbowRoll] = DEG_T_RAD * -53;
-        angles[RShoulderPitch] = DEG_T_RAD * -116;
-        angles[RShoulderRoll] = DEG_T_RAD * 8;//8;
-        angles[RElbowYaw] = DEG_T_RAD * 25;
-        angles[RElbowRoll] = DEG_T_RAD * -53;
-    }
-}
-
-void RSWalkModule2014::determineStartingArmState() {
-    // start from the current joints
-    for (int i = ARM_JOINT_FIRST; i <= ARM_JOINT_LAST; i++) {
-        armStart[i] = joints_->values_[i];
-    }
-
-    // if arms are far out, start at 0
-    //for (int i = 0; i < 2; i++) {
-    //int shoulderPitch = LShoulderPitch;
-    //int shoulderRoll = LShoulderRoll;
-    //if (i == 1) {
-    //shoulderPitch = RShoulderPitch;
-    //shoulderRoll = RShoulderRoll;
-    //}
-    //if ((joints_->values_[shoulderRoll] > DEG_T_RAD * 45) || // arm is up (from cross)
-    //(joints_->values_[shoulderPitch] > DEG_T_RAD * -90)) { // arm is in front
-    //arm_state_ = 0;
-    //return;
-    //}
-    //}
-
-    for (int state = 2; state >= 1; state--) {
-        Joints temp;
-        getArmsForState(state,temp);
-        bool acceptable = true;
-        for (int i = ARM_JOINT_FIRST; i <= ARM_JOINT_LAST; i++) {
-            if (fabs(joints_->values_[i] - temp[i]) > DEG_T_RAD * 10) {
-                //std::cout << JointNames[i] << " is too far for state " << state << " sensed: " << RAD_T_DEG * joints_->values_[i] << " " << " desired: " << RAD_T_DEG * temp[i] << std::endl;
-                acceptable = false;
-                break;
-            }
-        }
-        if (acceptable) {
-            arm_state_ = state;
-            //std::cout << "selected: " << arm_state_ << std::endl;
-            return;
-        }
-    }
-    // default to 0 if everything else has been bad
-    arm_state_ = 0;
-}
-
-void RSWalkModule2014::setArms(Joints angles, float timeInSeconds) {
-
-    float armStateTimes[3] = {1.0,0.5,0.5};
-    
-    if (timeInSeconds < 0.01)
-        timeInSeconds = 0.01;
-
-    float timePassed = frame_info_->seconds_since_start - arm_state_change_;
-
-    int prevState = arm_state_;
-    if (arm_state_ < 0) {
-        determineStartingArmState();
-    } else if (arm_state_ >= 2)
-        arm_state_ = 2;
-    else if (timePassed > armStateTimes[arm_state_]) {
-        arm_state_ += 1;
-    }
-    // goal keeper only does state 0 ever
-    if (walk_request_->keep_arms_out_){
-        arm_state_ = 0;
-    }
-
-    if (arm_state_ != prevState) {
-        //std::cout << frame_info_->frame_id << " changing state from " << prevState << " to " << arm_state_ << " after " << timePassed << " seconds" << std::endl;
-        arm_state_change_ = frame_info_->seconds_since_start;
-        timePassed = 0;
-        // save previous commands as start
-        if (prevState >= 0) {
-            getArmsForState(prevState,armStart);
-        }
-    }
-
-    // calculate the fraction we're into this state
-    float frac = (timePassed + timeInSeconds) / armStateTimes[arm_state_];
-    frac = crop(frac,0,1.0);
-
-    // get desired angles
-    getArmsForState(arm_state_,angles);
-
-    // set the values
-    for (int i = ARM_JOINT_FIRST; i <= ARM_JOINT_LAST; i++) {
-        float des = angles[i];
-        float orig = armStart[i];
-        float val = frac * (des - orig) + orig;
-        angles[i] = val;
-    }
-
-    // see if the arms are stable
-    float maxDeltaDesired = 0;
-    float maxDeltaDetected = 0;
-    for (int i = LShoulderPitch; i <= RElbowRoll; i++) {
-        float delta = angles[i] - joints_->values_[i];
-        maxDeltaDesired = max(fabs(delta),maxDeltaDesired);
-        maxDeltaDetected = max(fabs(joints_->getJointDelta(i)),maxDeltaDetected);
-    }
-    arms_close_to_targets_ = (maxDeltaDesired < DEG_T_RAD * 20) || (maxDeltaDetected < DEG_T_RAD * 0.35);
-}
-
-const float RSWalkModule2014::STAND_ANGLES[NUM_JOINTS] = {
-    0,
-    -0.366519,
-    0,
-    0.00669175,
-    -0.548284,
-    1.04734,
-    -0.499061,
-    -0.00669175,
-    0,
-    -0.00669175,
-    -0.548284,
-    1.04734,
-    -0.499061,
-    0.00669175,
-    -1.5708,
-    0.2,
-    -1.5708,
-    -0.2,
-    -1.5708,
-    0.2,
-    -1.5708,
-    -0.2
-};
 
 void RSWalkModule2014::selectivelySendStiffness() {
     for (int i = 0; i < NUM_JOINTS; i++) {
@@ -846,73 +485,106 @@ void RSWalkModule2014::selectivelySendStiffness() {
     }
 }
 
-bool RSWalkModule2014::doingSlowStand() {
-    return frame_info_->seconds_since_start < slow_stand_end;
+void RSWalkModule2014::handleStepIntoKick() {}
+
+bool RSWalkModule2014::updateGyroScopeCalibration(float cur_gyroX, float cur_gyroY) {
+
+  // 1. Calibrate gyroX
+  bool not_calibrated = true;
+  double delta_gyroX = abs(cur_gyroX - last_gyroX);
+  // maintain moving averages for gyro and delta_gyro
+  avg_gyroX = avg_gyroX * (1.0 - window_size) + cur_gyroX * window_size;
+  avg_delta_gyroX = avg_delta_gyroX * (1.0- window_size) + delta_gyroX * window_size;
+  if (avg_delta_gyroX < delta_threshold) {
+    // robot remains still, do calibration
+    offsetX = avg_gyroX;
+    // reset avg_delta so it does not keep recalibrating
+    avg_delta_gyroX = reset;
+    calX_count += 1; 
+    if (calX_count == 1) {
+      cout << "(First calibration, may not be accurate) A GyroX calibration was triggered, offsetX set to: " << offsetX << endl;
+    } else {
+      cout << "A GyroX calibration was triggered, offsetX set to: " << offsetX << endl;
+    }
+    last_gyroX_time = frame_info_-> seconds_since_start;
+  }
+  else {
+    DEBUG_PRINT("avg_delta_gyroX is: ", avg_delta_gyroX, " gyroX not stable, no calibration", "");
+  }
+
+  last_gyroX = cur_gyroX;
+
+  // 2. Calibrate gyroY
+  double delta_gyroY = abs(cur_gyroY - last_gyroY);
+  // maintain moving averages for gyro and delta_gyro
+  avg_gyroY = avg_gyroY * (1.0 - window_size) + cur_gyroY * window_size;
+  avg_delta_gyroY = avg_delta_gyroY * (1.0- window_size) + delta_gyroY * window_size;
+  if (avg_delta_gyroY < delta_threshold) {
+    // robot remains still, do calibration
+    offsetY = avg_gyroY;
+    // reset avg_delta so it does not keep recalibrating
+    avg_delta_gyroY = reset;
+    calY_count += 1;
+    if (calY_count == 1) {
+      cout << "(First calibration, may not be accurate) A GyroY calibration was triggered, offsetY set to: " << offsetY << endl;
+    } else {     
+      cout << "A GyroY calibration was triggered, offsetY set to: " << offsetY << endl;
+    }
+    last_gyroY_time = frame_info_-> seconds_since_start;
+  } else {
+    DEBUG_PRINT("avg_delta_gyroY is: ", avg_delta_gyroY, " gyroY not stable, no calibration", "");
+  }
+
+  last_gyroY = cur_gyroY;
+
+  if ((calX_count >= 2 && calY_count >= 2) or (getSystemTime() - calibration_write_time < 600)) {
+    not_calibrated = false;
+    calX_count = 2;
+    calY_count = 2;
+    
+    if (last_gyroY_time  > last_calibration_write + 30 and last_gyroX_time > last_calibration_write + 30) {
+      calibration_write_time = getSystemTime();
+      GyroConfig config;
+      config.offsetX = offsetX;
+      config.offsetY = offsetY;
+      config.calibration_write_time = calibration_write_time;
+            auto path = util::format("%s/%i_xy.yaml", util::cfgpath(util::GyroConfigs), robot_state_->robot_id_);
+      config.save(path);
+      last_calibration_write = frame_info_->seconds_since_start;
+    }
+  }
+
+  return not_calibrated;
 }
 
-void RSWalkModule2014::doSlowStand() {
-    float dt = slow_stand_end - frame_info_->seconds_since_start;
-    for (int i = BODY_JOINT_OFFSET; i < NUM_JOINTS; i++) {
-        commands_->angles_[i] = STAND_ANGLES[i];
-        commands_->stiffness_[i] = 1.0;
-    }
-    for (int ind = ARM_JOINT_FIRST; ind <= ARM_JOINT_LAST; ind ++)
-	commands_->stiffness_[ind] = 0.75; //0.75
-
-    setArms(commands_->angles_.data(),dt);
-    commands_->send_body_angles_ = true;
-    commands_->body_angle_time_ = 1000 * dt;
-    selectivelySendStiffness();
+bool RSWalkModule2014::isRequestForWalk(WalkRequestBlock::Motion motion) {
+  return (motion == WalkRequestBlock::WALK or
+          motion == WalkRequestBlock::STAND or
+          motion == WalkRequestBlock::STAND_STRAIGHT or
+          motion == WalkRequestBlock::LINE_UP);
 }
 
-bool RSWalkModule2014::readyToStartKickAfterStep() {
-    return !(clipper->isStanding()) && (step_into_kick_state_ == PERFORMING);	
+void RSWalkModule2014::setBodyForKick(ActionCommand::Body &body, float &ballX, float &ballY) {
+  body.kickForwardGap = walk_request_->kick_forward_gap_;
+  body.kickLeftGap = walk_request_->kick_left_gap_;
+  body.kickForwardOverThreshold = walk_request_->kick_over_forward_threshold_;
+  body.kickForwardUnderThreshold = walk_request_->kick_under_forward_threshold_;
+  body.kickLeftThreshold = walk_request_->kick_left_threshold_;
+  body.kickMaxForward = walk_request_->kick_max_forward_;
+  body.kickMaxLeft = walk_request_->kick_max_left_;
+  body.kickDoneCt = walk_request_->kick_done_ct_; 
+  body.kickTurnSpeed = walk_request_->kick_turn_speed_;
+  ballX = walk_request_->target_point_.translation.x;
+  ballY = walk_request_->target_point_.translation.y;
+  body.foot = (walk_request_->kick_with_left_ ? ActionCommand::Body::LEFT : ActionCommand::Body::RIGHT);
 }
 
-//TODO
-void RSWalkModule2014::handleStepIntoKick() {
-  //cout << "handleStepIntoKick"<<endl;
-    if ((walk_request_->new_command_) && (walk_request_->perform_kick_) && (walk_request_->step_into_kick_) && (step_into_kick_state_ == NONE)) {
-	//cout << "Kick: LINE UP" << endl;
-        //std::cout << frame_info_->frame_id << " RECEIVED STEP_INTO_KICK" << std::endl;
-        //WalkRequest &walk_request_BH = walk_engine_->theMotionRequest.walkRequest;
-//        MotionRequest::Motion &motion = walk_engine_->theMotionRequest.motion;
-        kick_request_->finished_with_step_ = false;
-        step_into_kick_state_ = PERFORMING;
-//        motion = MotionRequest::walk;
-//        walk_request_BH.mode = WalkRequest::percentageSpeedMode;
-//        walk_request_BH.speed = Pose2DBH(0,0,0);
-//        if (walk_request_->kick_with_left_)
-//            walk_request_BH.kickType = WalkRequest::stepForLeftKick;
-//        else
-//            walk_request_BH.kickType = WalkRequest::stepForRightKick;
-    } 
-
-    if (readyToStartKickAfterStep()) {
-	//cout << "Kick: READY to KICK" << endl;
-        step_into_kick_state_ = FINISHED_WITH_STEP;
-        walk_request_->noWalk();
-        kick_request_->finished_with_step_ = true;
-        time_step_into_kick_finished_ = frame_info_->seconds_since_start;
-        //std::cout << frame_info_->frame_id << " finished with step into kick" << std::endl;
-        return;
-    }
-
-    if (step_into_kick_state_ == FINISHED_WITH_STEP) {
-        if (kick_request_->kick_running_ || kick_request_->vision_kick_running_ || (frame_info_->seconds_since_start - time_step_into_kick_finished_ < 0.1)) {
-            //std::cout << frame_info_->frame_id << " kick is running: " << kick_request_->kick_running_ << " " << kick_request_->vision_kick_running_ << std::endl;
-        } else {
-            //std::cout << frame_info_->frame_id << " done" << std::endl;
-            step_into_kick_state_ = NONE;
-        }
-	//cout << "Kick: finished with step" << endl;
-        walk_request_->noWalk();
-        //walk_engine_->reset();
-    }
-
-    if (step_into_kick_state_ == PERFORMING) {
-        kick_request_->setNoKick();
-	//cout << "Kick: Performing" << endl;
-    }
-
+void RSWalkModule2014::toStandRequest(ActionCommand::Body &body, bool use_straight_stand) {
+  body.actionType = ActionCommand::Body::WALK;
+  body.forward = 0;
+  body.left = 0;
+  body.turn = 0;
+  body.bend = 1;
+  if (use_straight_stand)
+    body.bend = 0;
 }

@@ -1,3 +1,6 @@
+/*
+  modified: Ishan Durugkar, June 13, 2019
+*/
 #ifndef LIKELIHOOD_ESTIMATOR_H
 #define LIKELIHOOD_ESTIMATOR_H
 
@@ -7,9 +10,15 @@
 #include <stdarg.h>
 #include <vision/Logging.h>
 
+
+/*
+  normpdf used to use matrix computations. Especially determinant and inverse for the covariances.
+  These operations likely made this method very expensive.
+  Changes were made to make these array computations, which led to significant speedup
+*/
 /// @ingroup vision
-#define normpdf(x,u,E,k) ( pow(2 * M_PI, -k / 2.0) * 1.0 / sqrt(E.determinant()) * exp(-.5 *\
-      (float)((x - u).transpose() * E.inverse() * (x - u))\
+#define normpdf(x,u,E,k) ( pow(2 * M_PI, -k / 2.0) * 1.0 / sqrt(E.prod()) * exp(-.5 *\
+      (float)((x - u).square() / E).sum()\
       )\
     )
 
@@ -17,8 +26,8 @@
 template<int N>
 class LikelihoodEstimator {
   private:
-    typedef Eigen::Matrix<float, N, 1> Vector;
-    typedef Eigen::Matrix<float, N, N> Matrix;
+    typedef Eigen::Array<float, N, 1> Vector;
+    typedef Eigen::Array<float, N, 1> Matrix;
     float prob_;
     Vector mean_, measurement_, stddev_;
     Matrix cov_;
@@ -41,7 +50,7 @@ class LikelihoodEstimator {
       std::array<float,N> data { ts... };
       Vector v(data.data());
       for(int i = 0; i < N; i++) v[i] *= v[i];
-      cov_ = v.asDiagonal();
+      cov_ = v;  // .asDiagonal();
     }
     template<typename... Ts>
     float getLikelihood(Ts... ts) {

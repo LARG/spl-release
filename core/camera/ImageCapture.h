@@ -25,6 +25,10 @@ public:
   NaoCamera* top_camera_;
   void dequeueThread();
   void requeue();
+
+  void enableAutoWB();
+  void lockWB();
+
 private:
   // vision stuff
   pthread_t image_thread_;

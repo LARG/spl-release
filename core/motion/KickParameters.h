@@ -131,6 +131,9 @@ struct KickParameters {
   // do we want to step into the kick?
   bool step_into_kick_;
 
+  // Arms for extra balancing
+  float coronal_balance_multiplier_;
+
   KickStateInfo states[KickState::NUM_KICK_STATES];
 
   KickStateInfo* getStateInfoPtr(KickState::State state) {

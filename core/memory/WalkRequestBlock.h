@@ -24,6 +24,7 @@ DECLARE_INTERNAL_SCHEMA(struct WalkRequestBlock : public MemoryBlock {
       WAIT,
       STAND_STRAIGHT,
       LINE_UP,
+      STAND_PENALTY,
       NUM_OF_MOTIONS
       );
 
@@ -34,6 +35,7 @@ DECLARE_INTERNAL_SCHEMA(struct WalkRequestBlock : public MemoryBlock {
     void noWalk();
     void stand();
     void standStraight();
+    void standPenalty();
     void wait();
     void setStep(bool isLeft, float x, float y, float rotation);
     void setWalk(float x, float y, float rotation);
@@ -41,6 +43,7 @@ DECLARE_INTERNAL_SCHEMA(struct WalkRequestBlock : public MemoryBlock {
     void setFalling();
     void setKick(float distance, float heading, bool with_left, bool step_into_kick);
     void setLineUp(float relx, float rely, float rot, bool with_left);
+    void setLineUpParameters(float forward_gap, float left_gap, float forward_over_threshold, float forward_under_threshold, float left_threshold, float max_forward, float max_left, float done_ct, float turn_speed); 
     void setWalkKick(float relx, float rely, float rot, bool with_left, float heading=0.0f);
     void setOdometryOffsets(float fwd, float side, float turn);
     void setWalkTarget(float relx, float rely, float relang, bool pedantic = false);
@@ -105,6 +108,18 @@ DECLARE_INTERNAL_SCHEMA(struct WalkRequestBlock : public MemoryBlock {
     SCHEMA_FIELD(WalkType walk_type_);
 
     SCHEMA_FIELD(WalkControl walk_control_status_);
+
+    SCHEMA_FIELD(float kick_forward_gap_);
+    SCHEMA_FIELD(float kick_left_gap_);
+    SCHEMA_FIELD(float kick_over_forward_threshold_);
+    SCHEMA_FIELD(float kick_under_forward_threshold_);
+    SCHEMA_FIELD(float kick_left_threshold_);
+    SCHEMA_FIELD(float kick_max_forward_);
+    SCHEMA_FIELD(float kick_max_left_);
+    SCHEMA_FIELD(float kick_done_ct_);
+    SCHEMA_FIELD(float kick_turn_speed_);
+    
+    SCHEMA_FIELD(bool is_rotate_);
 });
 
 #endif /* end of include guard: WALKREQUESTBLOCK_RE8SDRLN */

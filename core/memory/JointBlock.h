@@ -14,6 +14,10 @@ DECLARE_INTERNAL_SCHEMA(struct JointBlock : public MemoryBlock {
       header.size = sizeof(JointBlock);
       for (int i=0; i<NUM_JOINTS; i++) {
         values_[i] = 0;
+        stiffness_[i] = 0;
+        temperature_[i] = 0;
+        current_[i] = 0;
+        status_[i] = 0;
       }
     }
 
@@ -25,9 +29,17 @@ DECLARE_INTERNAL_SCHEMA(struct JointBlock : public MemoryBlock {
       return values_[i] - prevValues_[i];
     }
     
+    float getJointTemperature(int i){
+      return temperature_[i];
+    }
+
     SCHEMA_FIELD(std::array<float,NUM_JOINTS> prevValues_);
     SCHEMA_FIELD(std::array<float,NUM_JOINTS> values_);
     SCHEMA_FIELD(std::array<float,NUM_JOINTS> stiffness_);
+    SCHEMA_FIELD(std::array<float,NUM_JOINTS> temperature_);
+    SCHEMA_FIELD(std::array<float,NUM_JOINTS> current_);
+    SCHEMA_FIELD(std::array<int,NUM_JOINTS> status_);
+
 });
 
 #endif

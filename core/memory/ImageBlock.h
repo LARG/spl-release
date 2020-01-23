@@ -9,6 +9,9 @@
 #include <common/ColorConversion.h>
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui/highgui.hpp>
+#ifdef USE_OPENCV3
+    #include <opencv2/imgcodecs/imgcodecs.hpp>
+#endif
 
 #include <schema/gen/ImageBlock_generated.h>
 

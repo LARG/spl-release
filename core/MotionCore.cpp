@@ -17,11 +17,11 @@
 #include <memory/WalkRequestBlock.h>
 #include <memory/WalkResponseBlock.h>
 #include <memory/ProcessedSonarBlock.h>
-#include <memory/OdometryBlock.h>
 
 #include <kinematics/KinematicsModule.h>
 #include <motion/KickModule.h>
 #include <motion/MotionModule.h>
+#include <motion/GetupModule.h>
 #include <motion/rswalk2014/RSWalkModule2014.h>
 #include <motion/SpecialMotionModule.h>
 #include <sensor/SensorModule.h>
@@ -52,6 +52,7 @@ MotionCore::MotionCore (CoreType type, bool use_shared_memory,int team_num, int 
   motion_(NULL),
   sensor_(NULL),
   sonar_(NULL),
+  getup_(NULL),
   dive_(NULL),
   specialM_(NULL),
   walk_(NULL),
@@ -100,12 +101,13 @@ void MotionCore::loadCalibration() {
   attempted = true;
   RobotConfig config;
   config.loadFromFile(memory_.data_path_ + "/config.yaml");
-  auto calfile = util::ssprintf("%s/%02i_calibration.cal", memory_.data_path_, config.robot_id);
+  auto calfile = util::ssprintf("%s/calibrations/%02i_calibration.cal", memory_.data_path_, config.robot_id);
   RobotCalibration cal;
   bool loaded = cal.loadFromFile(calfile);
   if(loaded) {
     calibration_ = new RobotCalibration(cal);
-    printf("Loaded calibration: %s\n", calfile.c_str());
+    printf("Loaded robot calibration: %s\n", calfile.c_str());
+    calibration_->applyDimensions(robot_info_->dimensions_.values_);
   }
   else {
     std::cout << "ERROR: No robot calibration found\n";
@@ -138,7 +140,10 @@ void MotionCore::init() {
 
   fps_time_ = frame_info_->seconds_since_start;
   time_motion_started_ = frame_info_->seconds_since_start;
+  last_temperature_check_time_ = -1.0;
   walk_request_->walk_type_ = INVALID_WALK;
+  walk_request_->walk_type_ = RUNSWIFT2014_WALK;
+  initWalkEngine();
   loadCalibration();
 }
 
@@ -151,6 +156,7 @@ bool MotionCore::alreadyProcessedFrame() {
 }
 
 void MotionCore::processMotionFrame() {
+    processed_sensors_->manuallyPlaced = !body_model_->feet_on_ground_;
   auto& frame_id = frame_info_->frame_id;
   if (alreadyProcessedFrame()) {
     //std::cout << "processMotionFrame, skipping frame " << frame_info_->frame_id << std::endl;
@@ -171,12 +177,12 @@ void MotionCore::processMotionFrame() {
 
   // actually do stuff
   processSensorUpdate();
+  checkTemperature();
+
   // check if the get up wants us to stand
-
-  // Determine commands - deprecated with addition of runswift walk
-//  if (walk_ != NULL)
-//    walk_->handleStepIntoKick();
-
+  if (getup_->needsStand()) {
+    walk_request_->stand();
+  }
 
   // kicks need to be before walk, so that they can change the walk request
   if (use_com_kick_)
@@ -191,21 +197,30 @@ void MotionCore::processMotionFrame() {
     kick_->setOffsetY(walk_->getOffsetY());
   }
 
-  updateOdometry();
-
+  // Dives and squats
+  if (dive_->isDiving() || walk_request_->dive_type_ == Dive::LEFT || walk_request_->dive_type_==Dive::RIGHT || walk_request_->dive_type_==Dive::CENTER || walk_request_->dive_type_==Dive::PENALTY_LEFT || walk_request_->dive_type_==Dive::PENALTY_RIGHT){
+    if (!dive_->isDiving()){
+      dive_->initDive(walk_request_->dive_type_, robot_state_->role_);
+    }
+    dive_->processFrame();
+  }
 
 
   // override commands with getup if necessary
- //  cout<<(walk_request_->motion_==WalkRequestBlock::FALLING)<<"("<< walk_request_->fallen_counter_<<std::endl;
-//  cout<<(walk_request_->motion_==WalkRequestBlock::FALLING)<<"("<<processed_sensors->values_[angleY]<<","<<processed_sensors->values_[angleX]<<")"<<std::endl;
-
-  //std::cout << "left " << body_model_->rel_parts_no_rotations_[BodyPart::left_hand].translation << " | right " << body_model_->rel_parts_no_rotations_[BodyPart::right_hand].translation << std::endl;
-
+  if (getup_->isGettingUp() or walk_request_->motion_ == WalkRequestBlock::FALLING) {
+    // possibly init get up
+    if (not getup_->isGettingUp())
+      getup_->initGetup();
+    getup_->processFrame();
+  }
 
   last_frame_processed_ = frame_id;
 }
 
 void MotionCore::processSensorUpdate() {
+  sensor_->processSensors();
+  kinematics_->calculatePose();
+  sonar_->processFrame();
 }
 
 void MotionCore::initModules() {
@@ -222,6 +237,8 @@ void MotionCore::initModules() {
   sensor_->init(&memory_,textlog_.get());
   sonar_ = new SonarModule();
   sonar_->init(&memory_,textlog_.get());
+  getup_ = new GetupModule();
+  getup_->init(&memory_,textlog_.get());
   dive_ = new DiveModule();
   dive_->init(&memory_,textlog_.get());
   //specialM_=new SpecialMotionModule();
@@ -258,7 +275,6 @@ void MotionCore::initMemory() {
   memory_.addBlockByName("kick_engine");
   memory_.addBlockByName("walk_engine");
   memory_.addBlockByName("odometry");
-  //memory_.addBlockByName("game_state");
   //memory_.addBlockByName("sonar");
 
   memory_.getOrAddBlockByName(frame_info_,"frame_info");
@@ -367,6 +383,20 @@ void MotionCore::preProcess() {
     processed_joint_angles_->prevValues_[i] = processed_joint_angles_->values_[i];
     processed_joint_angles_->values_[i] = signs[i] * raw_joint_angles_->values_[i];
     processed_joint_angles_->stiffness_[i] = raw_joint_angles_->stiffness_[i];
+    processed_joint_angles_->temperature_[i] = raw_joint_angles_->temperature_[i];
+    processed_joint_angles_->current_[i] = raw_joint_angles_->current_[i];
+    processed_joint_angles_->status_[i] = raw_joint_angles_->status_[i];
+  }
+
+  static int printctr = 0;
+  printctr++;
+  if(printctr % 200 == 0) {
+      // for (int i = 0; i < NUM_JOINTS; i++) {
+        int i = LAnklePitch;
+        std::cout << "Printing joint angle " << JointNames[i] << " " << raw_joint_angles_->values_[i] << std::endl;
+        // std::cout << "Printing joint stiffness" << JointNames[i] << " " << raw_joint_angles_->stiffness_[i] << std::endl;
+      // }
+      std::cout << std::endl;
   }
 
   // handle head offsets for reading
@@ -376,6 +406,7 @@ void MotionCore::preProcess() {
   if(calibration_ && calibration_->enabled) {
     calibration_->applyJoints(processed_joint_angles_->values_.data());
   }
+
 }
 
 void MotionCore::postProcess() {
@@ -498,7 +529,7 @@ void MotionCore::receiveData() {
   *walk_request_ = *sync_walk_request_;
   if (temp_status == WALK_CONTROL_DONE && sync_walk_request_->walk_control_status_ == WALK_CONTROL_SET)
     walk_request_->walk_control_status_ = temp_status;
-  if (temp_diveStatus == Dive::DONE && (sync_walk_request_->dive_type_ == Dive::LEFT || sync_walk_request_->dive_type_ == Dive::RIGHT || sync_walk_request_->dive_type_ == Dive::CENTER))
+  if (temp_diveStatus == Dive::DONE && (sync_walk_request_->dive_type_ == Dive::LEFT || sync_walk_request_->dive_type_ == Dive::RIGHT || sync_walk_request_->dive_type_ == Dive::CENTER || sync_walk_request_->dive_type_ == Dive::PENALTY_LEFT || sync_walk_request_->dive_type_ == Dive::PENALTY_RIGHT))
     walk_request_->dive_type_ = temp_diveStatus;
   *processed_joint_commands_ = *sync_joint_commands_;
   *odometry_ = *sync_odometry_;
@@ -524,58 +555,36 @@ void MotionCore::receiveData() {
 }
 
 
-void MotionCore::updateOdometry(){
-  // TODO RE-ENABLE ODOMETRY
-/*
-  // set if standing or walking
-  odometry_->standing = !walk_info_->walk_is_active_;
-  if (odometry_->standing) {
-    last_stand_frame_ = frame_info_->frame_id;
-  }
-  if (walk_request_->motion_ == WalkRequestBlock::STAND) {
-    if (next_stand_frame_ == 0)
-      next_stand_frame_ = frame_info_->frame_id + 4 * al_walk_param_->walk_step_min_period_;
-  } else
-    next_stand_frame_ = 0;
 
-  // save where robot was last time vision updated odom
-  if (odometry_->displacement.translation.x == 0 && odometry_->displacement.translation.y == 0 && odometry_->displacement.rotation == 0){
-    walk_info_->robot_odometry_frame_ = walk_info_->robot_last_position_;
-    last_odometry_update_ = frame_info_->frame_id;
-  }
+void MotionCore::checkTemperature() {
+  if (frame_info_->seconds_since_start - last_temperature_check_time_ < 5.0) return;
+  last_temperature_check_time_ = frame_info_->seconds_since_start;
 
-  // save last position
-  walk_info_->robot_last_position_ = walk_info_->robot_position_;
+  float eps = 0.01;
+  float hotTemp = 75.0 - eps;
+  float warmTemp = 70.0 - eps;
+  bool first = true;
 
-  // odometry is how much torso has moved last time vision used it
-  odometry_->displacement = walk_info_->robot_position_.globalToRelative(walk_info_->robot_odometry_frame_);
-
-  // correct for the robot walk offsets
-  bool do_odometry_correction = ((!odometry_->standing) && (frame_info_->frame_id - last_stand_frame_ > al_walk_param_->walk_step_min_period_ * 4)); // is not standing, and not just coming out of a stand
-  do_odometry_correction = do_odometry_correction && ((frame_info_->frame_id < next_stand_frame_) || (next_stand_frame_ == 0)); // don't correct if we're in the last step before standing
-
-  //std::cout << next_stand_frame_ << " " << frame_info_->frame_id << std::endl;
-  if (do_odometry_correction) {
-    // TODO: currently ignoring other offsets
-    float steps_per_second = 50.0 / al_walk_param_->walk_step_min_period_;
-    float max_turn_speed = DEG_T_RAD * al_walk_param_->walk_max_step_theta_ * steps_per_second;
-    float turn_offset_vel = walk_request_->odometry_turn_offset_ * max_turn_speed;
-    unsigned int num_frames_passed = frame_info_->frame_id - last_odometry_update_ + 1; // +1 for the current frame
-    double time = 0.01 * num_frames_passed;
-    float da = -1 * turn_offset_vel * time;
-
-    //float da = -1 * walk_request_->odometry_turn_offset_ * DEG_T_RAD * al_walk_param_->walk_max_step_theta_ / (2.0 * al_walk_param_->walk_step_min_period_);
-    //da *= 4;
-    //std::cout << odometry_->displacement.rotation << " " << da << std::endl;
-    odometry_->displacement.rotation += da;
+  // Check hot joints
+  for (int i=0; i < NUM_JOINTS; i++) {
+    if (processed_joint_angles_->temperature_[i] >= hotTemp) {
+      if (first) {
+        first = false;
+        std::cout << "Hot joints: " << std::endl;
+      }
+      std::cout << "  " << getJointName((Joint)i) << ": " << processed_joint_angles_->temperature_[i] << std::endl;
+    }
   }
 
-  // multiply by factor
-  odometry_->displacement.translation.x *= al_walk_param_->fwd_odometry_factor_;
-  odometry_->displacement.translation.y *= al_walk_param_->side_odometry_factor_;
-  if (odometry_->displacement.rotation > 0)
-    odometry_->displacement.rotation *= al_walk_param_->turn_ccw_odometry_factor_;
-  else
-    odometry_->displacement.rotation *= al_walk_param_->turn_cw_odometry_factor_;
-*/
+  // Check warm joints
+  first = true;
+  for (int i=0; i<NUM_JOINTS; i++) {
+    if ((processed_joint_angles_->temperature_[i] >= warmTemp) and (processed_joint_angles_->temperature_[i] < hotTemp)) {
+      if (first) {
+        first = false;
+        std::cout << "Warm joints: " << std::endl;
+      }
+      std::cout << "  " << getJointName((Joint)i) << ": " << processed_joint_angles_->temperature_[i] << std::endl;
+    }
+  }
 }

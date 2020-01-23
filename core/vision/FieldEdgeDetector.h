@@ -8,7 +8,7 @@
 #include <vision/ObjectDetector.h>
 #include <vision/structures/BallCandidate.h>
 #include <vision/structures/HorizonLine.h>
-#include <vision/structures/ObjectCandidate.h>
+#include <vision/structures/VisionObjectCandidate.h>
 #include <vision/Macros.h>
 #include <vision/estimators/BallEstimator.h>
 #include <math/Point.h>
@@ -56,7 +56,7 @@ class FieldEdgeDetector : public ObjectDetector {
   std::vector<FieldEdgePoint> hullPoints;
   std::vector<FieldEdgePoint> hullPointCands;
 
-  std::vector<ObjectCandidate> objects;
+  std::vector<VisionObjectCandidate> objects;
 
 
   std::vector<LineSegment> hullSegments;

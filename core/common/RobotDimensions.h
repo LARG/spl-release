@@ -97,24 +97,24 @@ public:
   void setNaoH21() {
     // Nao v4 with no motorized hands
     memset(isAngle_, false, NUM_DIMENSIONS);
-    values_[torsoHipRoll] = 48.0 * DEG_T_RAD; // MEASURED_BY_HAND
     isAngle_[torsoHipRoll] = true;
-    values_[hipOffsetY] = 47; // MEASURED_BY_HAND
-    values_[torsoToHip] = values_[hipOffsetY] / sin(values_[torsoHipRoll]);
-    values_[torsoToHipZ] = values_[hipOffsetY] / tan(values_[torsoHipRoll]); 
+    values_[hipOffsetY] = 50;
+    values_[torsoToHipZ] = 85; 
+    values_[torsoToHip] = sqrtf(pow(values_[hipOffsetY],2) + pow(values_[torsoToHipZ],2));
+    values_[torsoHipRoll] = atan2f(values_[hipOffsetY], values_[torsoToHipZ]);
 		
     values_[lengthBetweenLegs] = 2 * values_[hipOffsetY];
-		values_[upperLegLength] = 100;
-		values_[lowerLegLength] = 102.90;
+	values_[upperLegLength] = 100;
+	values_[lowerLegLength] = 102.90;
     values_[neckOffsetZ] = 126.5;
-    values_[hipOffsetZ] = 85.0;
-    values_[torsoToHeadPan] = values_[hipOffsetZ] + values_[neckOffsetZ] - values_[torsoToHipZ];
-    values_[zLegJoint1ToHeadPan] = 85.0 + 126.5;
-		values_[armOffset1] = 0;
+    values_[hipOffsetZ] = values_[torsoToHipZ];
+    values_[torsoToHeadPan] = values_[neckOffsetZ];
+    values_[zLegJoint1ToHeadPan] = 85.0 + 126.5; // not used
+	values_[armOffset1] = 0;
     values_[armOffset2] = 98;
-    values_[armOffset3] = 137;
-    values_[upperArmLength] = 105.0;
-    values_[lowerArmLength] = 120.0; // estimated
+    values_[armOffset3] = 126.5;
+    values_[upperArmLength] = 105;
+    values_[lowerArmLength] = 57.75 + 55.95;
     values_[elbowOffsetY] = 15.0;
     values_[footHeight] = 45.19;
     values_[headTiltOffset] = 0;
@@ -135,9 +135,9 @@ public:
     isAngle_[rollOffsetToTopCamera] = true;
     values_[yawOffsetToTopCamera] = 0;
     isAngle_[yawOffsetToTopCamera] = true;
-    values_[headTiltFactorBottomCamera] = 1.5 * DEG_T_RAD;
+    values_[headTiltFactorBottomCamera] = 0; //1.5 * DEG_T_RAD;
     isAngle_[headTiltFactorBottomCamera] = true;
-    values_[headTiltFactorTopCamera] = 1.5 * DEG_T_RAD;
+    values_[headTiltFactorTopCamera] = 0; //1.5 * DEG_T_RAD;
     isAngle_[headTiltFactorTopCamera] = true;
     values_[headRollFactorBottomCamera] = 0;
     isAngle_[headRollFactorBottomCamera] = true;
@@ -165,6 +165,28 @@ public:
     values_[FSR_LRR_Offset2] = -19.1f;
     values_[FSR_LRR_Offset3] = 0;
   }
+
+
+  void setCameraParameters(float tiltBotCam, float rollBotCam, float tiltTopCam, float rollTopCam) {
+        values_[tiltOffsetToBottomCamera] += tiltBotCam;
+        values_[rollOffsetToBottomCamera] += rollBotCam;
+        values_[tiltOffsetToTopCamera] += tiltTopCam;
+        values_[rollOffsetToTopCamera] += rollTopCam;
+ 
+        std::cout << "***************New tilt offset to top cam: " << values_[tiltOffsetToTopCamera] << "\n";
+  
+  }
+
+  void setHeadOffsets(float tilt, float pan) {
+        values_[headTiltOffset] += tilt;
+        values_[headPanOffset] += pan;
+
+        std::cout << "*********** TILT << " << values_[headTiltOffset] << " PAN " << values_[headPanOffset] << "\n";
+  }
+
+
+
+
 };
 
 static std::string DimensionNames[] = {

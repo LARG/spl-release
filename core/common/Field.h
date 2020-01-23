@@ -25,7 +25,7 @@ extern const float PENALTY_X;
 extern const float CIRCLE_DIAMETER;
 extern const float CIRCLE_RADIUS;
 extern const float LINE_WIDTH;
-
+extern const float BORDER_STRIP_WIDTH;
 extern const float GOAL_HEIGHT;
 
 extern const float FIELD_CENTER_X;

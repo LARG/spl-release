@@ -1,12 +1,27 @@
 #!/usr/bin/env python
 
 import sys, subprocess, os, shutil, glob
-from common import onLabMachine
 
-validInterfaces = ['nao','motion','vision','memory_test','core','pythonswig','headless']
+# interfaceDeps is a dictionary of interfaces to their depencencies. This is
+# not the most elegant way to handle this, but in lieu of a better build system
+# this works okay. Previously this dependency structure was found in qiproject
+# files. This must not have cyclic dependencies.
+interfaceDeps = {
+        'nao':['core', 'pythonswig'],
+        'motion':['rswalk2014','nao', 'lola'],
+        'vision':['nao', 'lola'],
+        'memory_test':[],
+        'tool':[],
+        'core':[],
+        'pythonswig':[],
+        'headless':[],
+        'lola':['rswalk2014'],
+        'rswalk2014':['core']
+        }
+validInterfaces = interfaceDeps.keys()
 allInterfaces = validInterfaces[:]
 allInterfaces.remove('headless')
-localInterfaces = ['headless']
+localInterfaces = ["tool", 'headless']
 robotInterfaces = ['nao','motion','vision']
 
 NAO_HOME = os.getenv('NAO_HOME')
@@ -29,6 +44,16 @@ def getNumProcs():
     out, err = p.communicate()
     numProcs = int(out)
     return numProcs
+
+def prependDeps(seq):
+    if not seq:
+        return []
+    else:
+        result = []
+        for s in seq:
+            result.extend(prependDeps(interfaceDeps[s]))
+            result.append(s)
+        return result
 
 def makeUnique(seq, idfun=None): 
   # order preserving
@@ -67,13 +92,14 @@ def compileInterfaces(interfaces,options):
       if not compileLocal(local):
         print "Compile failed for %s" % local
         return False
-  if len(interfaces) == 0: return True
-  interfaceStr = ' '.join(interfaces)
-  cmd = 'qibuild make -c atom --build-prefix=%s %s %s' % (options.build_dir,interfaceStr,flags)
-  print '-----------------------------------------'
-  print 'COMPILING interfaces: %s' % interfaceStr
-  print cmd
-  sysCall(cmd,'Compile failed')
+  for interface in interfaces:
+    print '-----------------------------------------'
+    print 'COMPILING interface: %s' % interface
+    build_dir = os.path.join(options.build_dir,interface)
+    os.chdir(build_dir)
+    cmd = "make %s" % flags
+    print cmd
+    sysCall(cmd,'Compile failed')
 
 def configureInterfaces(interfaces,flags,options):
   if len(interfaces) == 0:
@@ -86,17 +112,22 @@ def configureInterfaces(interfaces,flags,options):
         print "Configure failed for %s" % local
         return False
   if len(interfaces) == 0: return True
-  interfaceStr = ' '.join(interfaces)
   flags += ' -DFORCE_NO_CCACHE=1 '
   if options.textlog:
-    flags += ' -D ALLOW_DEBUG_LOG=true'
+    flags += ' -DALLOW_DEBUG_LOG=true'
   if options.optimize:
-    flags += " -D OPTIMIZE=true"
-  cmd = 'qibuild configure -c atom --build-prefix=%s %s %s' % (options.build_dir,interfaceStr,flags)
-  print '-----------------------------------------'
-  print 'CONFIGURING interfaces: %s' % interfaceStr
-  print cmd
-  sysCall(cmd,'Configure failed')
+    flags += " -DOPTIMIZE=true"
+  for interface in interfaces:
+    print '-----------------------------------------'
+    print 'CONFIGURING interfaces: %s' % ' '.join(interfaces)
+    build_dir = os.path.join(options.build_dir, interface)
+    sysCall("mkdir -p %s" % build_dir)
+    os.chdir(build_dir)
+    flags += " -DCMAKE_TOOLCHAIN_FILE=%s/build/cross-config.cmake" % NAO_HOME
+    flags += " -DUSE_OPENCV3=1"
+    cmd = "cmake %s/build/%s %s" % (NAO_HOME, interface, flags)
+    print cmd
+    sysCall(cmd)
 
 def parseArgs(args):
   from optparse import OptionParser
@@ -166,9 +197,9 @@ def main(args):
 
   flags = ''
   if options.debug:
-    flags += '--debug '
+    flags += '-DCMAKE_BUILD_TYPE=Debug '
   else:
-    flags += '--release '
+    flags += ''
 
   # get interfaces to be compiled (e.g. vision, all)
   interfaces = []
@@ -184,6 +215,8 @@ def main(args):
       interfaces.append("pythonswig")
     else:
       interfaces.append(arg.replace('/',''))
+  if not options.clean:
+      interfaces = prependDeps(interfaces)
   # make interfaces unique
   interfaces = makeUnique(interfaces)
   # check interfaces

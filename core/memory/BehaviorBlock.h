@@ -62,6 +62,8 @@ class Dive { // class for python access, otherwise namespace
     LEFT,
     RIGHT,
     CENTER,
+    PENALTY_LEFT,
+    PENALTY_RIGHT,
     DONE          // Motion will set the diveType to DONE when the dive behavior is finished. 
   };
 };
@@ -115,8 +117,11 @@ struct BehaviorBlock : public MemoryBlock {
     avoidSonarTime(0),
     avoidSonarDirIsLeft(true),
     sonarObstacleTime(0),
+    outOnUsTime(0),
     keeperClearing(false),
     keeperDiving(Dive::NONE),
+    penaltyKeeperWatchBall(false),
+    penaltyKeeperState(0),
     walk_mode_(WalkMode::SLOW),
     log_behavior_trace_(false),
     test_odom_fwd(0),
@@ -222,6 +227,8 @@ struct BehaviorBlock : public MemoryBlock {
   bool avoidSonarDirIsLeft;
   float sonarObstacleTime;
 
+  float outOnUsTime;
+
   // kick region
   bool validKickRegion[NUM_KICK_REGIONS_X][NUM_KICK_REGIONS_Y];
 
@@ -239,6 +246,8 @@ struct BehaviorBlock : public MemoryBlock {
   bool keeperClearing;
   // keeper is diving
   int keeperDiving;
+  bool penaltyKeeperWatchBall;
+  int penaltyKeeperState;
 
   Point2D keeperRelBallPos;
   Point2D keeperRelBallVel;
@@ -270,8 +279,8 @@ struct BehaviorBlock : public MemoryBlock {
   // info about what set play we want to do
   SetPlayInfo setPlayInfo;
   
-  Eigen::Matrix2f keeperRelBallPosCov;
-  Eigen::Matrix2f keeperRelBallVelCov;
+  Eigen::Matrix<float, 2,2,Eigen::DontAlign> keeperRelBallPosCov;
+  Eigen::Matrix<float, 2,2,Eigen::DontAlign> keeperRelBallVelCov;
   bool ballLeftCenter;
   Point2D defender_position_;
 };

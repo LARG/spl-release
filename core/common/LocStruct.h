@@ -20,6 +20,7 @@ DECLARE_INTERNAL_SCHEMA(struct LocStruct {
 
   static constexpr float OrientConversion = RAD_T_DEG / 2;
   inline float orientation() const { return iorientation / OrientConversion; }
+  inline void setOrientation(const int8_t orient) { iorientation = orient*OrientConversion; }
   inline Point2D ballPos() const { return Point2D(balls[0],balls[1]); }
   inline void setBallPos(const Point2D& pos) { balls[0] = pos.x; balls[1] = pos.y; }
   inline Point2D altBall1() const { return Point2D(balls[2],balls[3]); }

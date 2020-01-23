@@ -8,7 +8,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 #ifndef TOOL
-#include <alvision/alvisiondefinitions.h>
+// #include <alvision/alvisiondefinitions.h>
 #else
 namespace AL {
   const int kYUVColorSpace = 0;

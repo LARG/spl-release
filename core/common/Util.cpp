@@ -5,6 +5,7 @@
 #include <fstream>
 #include <string>
 #include <boost/filesystem.hpp>
+#include <vector>
 
 using namespace std;
 

@@ -2,6 +2,7 @@
 
 #include <Module.h>
 #include <memory/MemoryCache.h>
+#include <audio/FFTConfig.h>
 #include <deque>
 
 class KangarooDetector;
@@ -20,11 +21,16 @@ class AudioModule: public Module {
     void initFromMemory();
     void processFrame();
     void processCommunications();
+    const FFT& fft() const;
+    const FFTConfig& fftConfig() const { return fft_config_; }
+    void updateConfig(FFTConfig fftConfig);
     AudioDetector* detector();
 
   private:
     unsigned long long timestamp_ = 0;
     MemoryCache cache_;
+    std::unique_ptr<KeypointDetector> detector_;
+    FFTConfig fft_config_;
     TextLogger*& tlogger_;
     int whistle_heard_frame_;
     std::deque<float> scores_;

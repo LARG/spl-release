@@ -74,6 +74,7 @@ class CommunicationModule: public Module {
   JointCommandBlock *joint_commands_;
     
   //Udp for robot team communication
+  //ThreadedUDPSocket teamUDP;
   UDPWrapper* teamUDP;
   void listenTeamUDP();
 
@@ -82,6 +83,7 @@ class CommunicationModule: public Module {
   void listenCoachUDP();
 
   //Udp for the tools commands to the robot
+  //ThreadedUDPSocket toolUDP;
   UDPWrapper* toolUDP;
   void listenToolUDP();
   void handleCameraParamsMessage(CameraParams &params, char *msg);
@@ -89,6 +91,7 @@ class CommunicationModule: public Module {
   void handleLoggingBlocksMessage(const ToolPacket& tp);
 
   //Messages from game controller
+  //ThreadedUDPSocket gameControllerUDP;
   UDPWrapper *gcDataUDP, *gcReturnUDP;
   void listenGameControllerUDP();
   void sendGameControllerUDP();

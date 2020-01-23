@@ -3,6 +3,9 @@
 
 void GameStateBlock::setState(State state) {
   // If we've heard the whistle recently don't go back into set
+  // This is because we ignore the state communicated by GameController 
+  // and go into PLAYING if we hear the whistle in SET.
+  // GC gives state PLAYING 20 seconds after whistle is heard
   if(whistleElapsedTime() <= 20 && state == SET && state_ == PLAYING) {
     return;
   }

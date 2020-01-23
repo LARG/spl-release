@@ -4,7 +4,7 @@ cd $DIR
 
 mkdir -p build/cross
 cd build/cross
-cmake ../.. -DCROSS_COMPILE=TRUE
+cmake ../.. -DCROSS_COMPILE=TRUE -DCMAKE_TOOLCHAIN_FILE=$NAO_HOME/build/cross-config.cmake
 make -j 6
 cd $DIR
 

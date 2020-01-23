@@ -92,28 +92,28 @@ void ImageBlock::_deserialize(const schema::ImageBlock* data) {
   this->bottom_params_.deserialize(data->bottom_params_());
   auto tpath = constructPath("top", "yuv");
   if(!buffer_logging_ && util::fexists(tpath)) {
-    auto tfile = yuview::YUVImage::ReadSerializedObject(tpath);
-    std::copy(tfile.buffer(), tfile.buffer() + tfile.dataSize(), this->img_top_local_.begin());
-  } else {
-    schema::std::deserialize(data->img_top_local_(), this->img_top_local_);
-    if(!buffer_logging_) {
-      auto tfile = yuview::YUVImage::CreateFromRawBuffer(
-        this->img_top_local_.begin(), this->top_params_.width, this->top_params_.height
-      );
-      tfile.save(tpath);
-    }
+     auto tfile = yuview::YUVImage::ReadSerializedObject(tpath);
+     std::copy(tfile.buffer(), tfile.buffer() + tfile.dataSize(), this->img_top_local_.begin());
+   } else {
+     schema::std::deserialize(data->img_top_local_(), this->img_top_local_);
+     if(!buffer_logging_) {
+       auto tfile = yuview::YUVImage::CreateFromRawBuffer(
+         this->img_top_local_.begin(), this->top_params_.width, this->top_params_.height
+       );
+       tfile.save(tpath);
+     }
   }
   auto bpath = constructPath("bottom", "yuv");
   if(!buffer_logging_ && util::fexists(bpath)) {
-    auto bfile = yuview::YUVImage::ReadSerializedObject(bpath);
-    std::copy(bfile.buffer(), bfile.buffer() + bfile.dataSize(), this->img_bottom_local_.begin());
+     auto bfile = yuview::YUVImage::ReadSerializedObject(bpath);
+     std::copy(bfile.buffer(), bfile.buffer() + bfile.dataSize(), this->img_bottom_local_.begin());
   } else {
     schema::std::deserialize(data->img_bottom_local_(), this->img_bottom_local_);
     if(!buffer_logging_) {
-      auto bfile = yuview::YUVImage::CreateFromRawBuffer(
-        this->img_bottom_local_.begin(), this->bottom_params_.width, this->bottom_params_.height
-      );
-      bfile.save(bpath);
+       auto bfile = yuview::YUVImage::CreateFromRawBuffer(
+         this->img_bottom_local_.begin(), this->bottom_params_.width, this->bottom_params_.height
+       );
+       bfile.save(bpath);
     }
   }
   setLocal();

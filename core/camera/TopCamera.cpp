@@ -5,5 +5,6 @@ TopCamera::TopCamera(const ImageParams& iparams, CameraParams& p, CameraParams& 
     vflip_ = true;
     hflip_ = true;
     exposure = 200;
+    brightness = 8;
     init();
 }

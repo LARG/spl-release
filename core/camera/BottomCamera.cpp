@@ -5,5 +5,6 @@ BottomCamera::BottomCamera(const ImageParams& iparams, CameraParams& p, CameraPa
     vflip_ = false;
     hflip_ = false;
     exposure = 200;
+    brightness = 32;
     init();
 }

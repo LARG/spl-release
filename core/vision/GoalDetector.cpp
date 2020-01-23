@@ -1,5 +1,5 @@
 #include <vision/GoalDetector.h>
-#include <vision/ml/DeepClassifier.h>
+// #include <vision/ml/DeepClassifier.h>
 #include <vision/ml/SvmClassifier.h>
 #include <VisionCore.h>
 #include <string>
@@ -346,7 +346,7 @@ void GoalDetector::detectWhiteGoal(){
   // Obtain ROIs from field edge detector
   for (int o = 0; o < field_edge_detector_.objects.size(); o++){
 
-    ObjectCandidate &object = field_edge_detector_.objects[o];
+    VisionObjectCandidate &object = field_edge_detector_.objects[o];
 
     if (!object.valid || !object.postCandidate)
       continue;
@@ -831,7 +831,7 @@ void GoalDetector::detectWhiteGoal(){
 
     if (goalPostCandidates[i].invalid) continue;
 
-    ObjectCandidate &object = field_edge_detector_.objects[goalPostCandidates[i].objectIndex];
+    VisionObjectCandidate &object = field_edge_detector_.objects[goalPostCandidates[i].objectIndex];
     object.robotCandidate = false;
 
   }

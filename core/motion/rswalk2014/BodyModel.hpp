@@ -134,6 +134,8 @@ class BodyModel {
          return pendulumModel;
       }
 
+      void setPendulumHeight(float height){pendulumModel.setPendulumHeight(height);}
+
       float getFootZMP(bool isLeft, const SensorValues &sensors);
       float getHorizontalFootZMP(bool isLeft, const SensorValues &sensors);
 

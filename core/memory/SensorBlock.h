@@ -18,26 +18,20 @@ DECLARE_INTERNAL_SCHEMA(struct SensorBlock : public MemoryBlock {
         values_[i] = 0;
       }
 
-      for (int i = 0; i < NUM_JOINTS; i++){
-        joint_temperatures_[i] = 0;
-      }
-
       fsr_feet_ = 0;
       fsr_left_side_ = 0;
       fsr_left_front_ = 0;
       fsr_right_side_ = 0;
       fsr_right_front_ = 0;
-    }
-
-    float getJointTemperature(int i){
-      return joint_temperatures_[i];
+      manuallyPlaced = false;
     }
 
     SCHEMA_FIELD(std::array<float,NUM_SENSORS> prevValues_);
     SCHEMA_FIELD(std::array<float,NUM_SENSORS> values_);
     SCHEMA_FIELD(std::array<float,NUM_SONAR_VALS> sonar_left_);
     SCHEMA_FIELD(std::array<float,NUM_SONAR_VALS> sonar_right_);
-    SCHEMA_FIELD(std::array<float,NUM_JOINTS> joint_temperatures_);
+
+    SCHEMA_FIELD(bool manuallyPlaced);
     
     SCHEMA_FIELD(float angleXVel);
     SCHEMA_FIELD(float angleYVel);

@@ -3,6 +3,8 @@
 #include <map>
 #include <string>
 #include "Generator.hpp"
+#include <motion/RSWalkParameters.h>
+
 
 class DistributedGenerator : Generator {
    public:
@@ -22,6 +24,8 @@ class DistributedGenerator : Generator {
       bool walkIsActive();
       bool isLinedUp();
       void resetLinedUp();
+      void setWalkParameters(const RSWalkParameters &params);
+
    public:
       Generator* bodyGenerators[ActionCommand::Body::NUM_ACTION_TYPES];
       Generator* headGenerator;

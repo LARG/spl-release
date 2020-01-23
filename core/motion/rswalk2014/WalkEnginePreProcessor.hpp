@@ -4,6 +4,8 @@
 #include "Walk2014Generator.hpp"
 #include "Generator.hpp"
 #include "utils/Timer.hpp"
+#include <motion/RSWalkParameters.h>
+
 
 class WalkEnginePreProcessor : Generator {
    public:
@@ -22,6 +24,10 @@ class WalkEnginePreProcessor : Generator {
       bool isLinedUp();
       void resetLinedUp();
       bool linedUp;
+      void setWalkParameters(const RSWalkParameters &params) {
+         walkEngine->setWalkParameters(params);
+      }
+
    public:
 
       class LineUpEngine {

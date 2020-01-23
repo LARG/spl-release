@@ -1709,7 +1709,6 @@ float LineSegment::length() const {
 }
 
 Point2D LineSegment::getPointOnSegmentClosestTo(Point2D p) const {
-  if(p.isBetweenTwoPoints(start, end)) return p;
   const float len2 = length() * length();
   if(len2 == 0.0)
       return start;

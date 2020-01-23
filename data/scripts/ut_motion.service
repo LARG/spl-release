@@ -1,0 +1,13 @@
+[Unit]
+Description=UT Austin Villa Motion
+Requires=lola.service
+After=lola.service
+
+[Service]
+Type=forking
+ExecStart=/home/nao/bin/start_motion.sh
+RestartSec=5
+Restart=always
+
+[Install]
+WantedBy=default.target

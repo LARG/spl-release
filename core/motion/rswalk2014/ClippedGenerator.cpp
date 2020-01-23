@@ -10,12 +10,10 @@ using boost::program_options::variables_map;
 ClippedGenerator::ClippedGenerator(Generator* g)
    : generator(g),
      old_exists(false) {
-   //llog(INFO) << "ClippedGenerator constructed" << std::endl;
 }
 
 ClippedGenerator::~ClippedGenerator() {
    delete generator;
-   //llog(INFO) << "ClippedGenerator destroyed" << std::endl;
 }
 
 bool ClippedGenerator::isActive() {
@@ -23,10 +21,17 @@ bool ClippedGenerator::isActive() {
 }
 
 
-bool ClippedGenerator::isStanding() { return ((DistributedGenerator*)generator)->isStanding();
+bool ClippedGenerator::isStanding() {
+  return ((DistributedGenerator*)generator)->isStanding();
 }
 
-bool ClippedGenerator::isWalkActive() {return ((DistributedGenerator*)generator)->walkIsActive();}
+bool ClippedGenerator::isWalkActive() {
+  return ((DistributedGenerator*)generator)->walkIsActive();
+}
+      
+void ClippedGenerator::setWalkParameters(const RSWalkParameters &params) {
+  ((DistributedGenerator*)generator)->setWalkParameters(params);
+}
 
 void ClippedGenerator::reset() {
    generator->reset();

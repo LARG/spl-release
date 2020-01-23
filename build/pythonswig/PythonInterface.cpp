@@ -11,7 +11,7 @@ std::mutex PythonInterface::PY_MUTEX;
 std::mutex PythonInterface::CORE_MUTEX;
 bool PythonInterface::EnableOptimization = true;
 
-static_assert(PY_MAJOR_VERSION == 2 && PY_MINOR_VERSION == 7 && PY_MICRO_VERSION >= 5 && PY_MICRO_VERSION <= 6, "Must compile with Python Version 2.7.5/6");
+static_assert(PY_MAJOR_VERSION == 2 && PY_MINOR_VERSION == 7 && PY_MICRO_VERSION >= 5 && PY_MICRO_VERSION <= 12, "Must compile with Python Version 2.7.5-12");
 
 void PythonInterface::GlobalInit() {
   if(GLOBAL_INITIALIZED) return;
@@ -31,6 +31,7 @@ void PythonInterface::GlobalInit() {
     std::string swigPath = SWIG_MODULE_DIR;
     setenv("PYTHONPATH", (scriptPath + swigPath).c_str(), 1);
   }
+
 #ifndef TOOL
   if(EnableOptimization) {
     setenv("PYTHONOPTIMIZE", "yes", 0);

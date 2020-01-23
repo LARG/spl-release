@@ -2,25 +2,27 @@
  * \file Platform/linux/NaoCamera.cpp
  * Interface to the Nao camera using linux-uvc.
  * \author Colin Graf
- * \author Thomas Röfer
+ * \author Thomas Rï¿½fer
  * \author Todd Hester
  */
 
 #include "NaoCamera.h"
 #include <sys/stat.h>
 #include <unistd.h>
+#include <thread>
+#include <chrono>
 
-  // TODO: for camera color issue can try:
-  // 1. disable/enable streaming
-  // 2. init camera defaults (init/width)
-  // X. init image format (yuv, size)
-  // 4. set initial settings
-  // X. try req/mapping buffers for each camera?
-  // X. try init camera settings after mem map?
-  // 7. if these don't work...
-  //    a. maybe disable streaming while changing them?
-  //    b. maybe unmap buffers and re-map after change?
-  //    c. possibly after camera default init.. we have re-init the other things (framerate, format, etc)?
+// TODO: for camera color issue can try:
+// 1. disable/enable streaming
+// 2. init camera defaults (init/width)
+// X. init image format (yuv, size)
+// 4. set initial settings
+// X. try req/mapping buffers for each camera?
+// X. try init camera settings after mem map?
+// 7. if these don't work...
+//    a. maybe disable streaming while changing them?
+//    b. maybe unmap buffers and re-map after change?
+//    c. possibly after camera default init.. we have re-init the other things (framerate, format, etc)?
 
 NaoCamera::NaoCamera(const ImageParams& iparams, CameraParams& camera_params, CameraParams& read_camera_params) : iparams_(iparams), nextBuf(0), prevBuf(0), timeStamp(0), storedTimeStamp(0), initialized(false), camera_params_(camera_params), read_camera_params_(read_camera_params) {}
 
@@ -51,12 +53,28 @@ void NaoCamera::reset() {
 bool NaoCamera::selfTest(){
   uint8_t* image = getImage();
   for(int i=0; i <= iparams_.rawSize - 2; i+=2){
-      int y = image[i];
-      int uv = image[i + 1];
-      if(uv < 120 || uv > 140)
-          return true; // non-black area of image found, test passed
+    int y = image[i];
+    int uv = image[i + 1];
+    if(uv < 120 || uv > 140)
+      return true; // non-black area of image found, test passed
   }
   return false; // entire image is black
+}
+
+// Turns on automatic white balancing
+void NaoCamera::enableAutoWB(){
+
+  if(!setControlSetting(V4L2_CID_AUTO_WHITE_BALANCE, 1)) std::cerr << "Error setting auto white balance: " << errno << "\n";
+
+}
+
+// Reads the current white balance and locks it to that by turning off auto WB
+int NaoCamera::lockWB(){
+
+  int wb = getControlSetting(V4L2_CID_DO_WHITE_BALANCE);
+  if(!setControlSetting(V4L2_CID_AUTO_WHITE_BALANCE, 0)) std::cerr << "Error setting manual white balance: " << errno << "\n";
+  if(!setControlSetting(V4L2_CID_DO_WHITE_BALANCE, wb)) std::cerr << "Error setting manual white balance: " << errno << "\n"; // 2700-6500
+  return wb;
 }
 
 NaoCamera::~NaoCamera() {
@@ -127,13 +145,13 @@ void NaoCamera::initOpenVideoDevice() {
   struct stat st;
   if (-1 == stat(device_path_.c_str(), &st)) {
     std::cerr << "NaoCamera(Fatal): Cannot identify '" << device_path_
-              << "': " << errno << ", " << strerror(errno) << std::endl;
+      << "': " << errno << ", " << strerror(errno) << std::endl;
     exit (EXIT_FAILURE);
   }
 
   if (!S_ISCHR(st.st_mode)) {
     std::cerr << "NaoCamera(Fatal): '" << device_path_
-              << "' does not exist! " << std::endl;
+      << "' does not exist! " << std::endl;
     exit (EXIT_FAILURE);
   }
 
@@ -141,7 +159,7 @@ void NaoCamera::initOpenVideoDevice() {
 
   if (-1 == videoDeviceFd) {
     std::cerr << "NaoCamera(Fatal): Cannot open '" << device_path_
-              << "': " << errno << ", " << strerror(errno) << std::endl;
+      << "': " << errno << ", " << strerror(errno) << std::endl;
     exit (EXIT_FAILURE);
   }
 }
@@ -194,29 +212,219 @@ void NaoCamera::initSetFrameRate() {
   if(result == -1) std::cout << "NaoCamera: Error setting frame rate\n";
 }
 
+
+int NaoCamera::set_uvc_xu(int device_fd, uint8_t extension_unit_id, uint8_t control_selector,
+    uint16_t size, uint8_t* data)
+{
+
+
+  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+
+  struct uvc_xu_control_query query;
+  query.unit = extension_unit_id;
+  query.selector = control_selector;
+  query.query = UVC_SET_CUR;
+  query.size = size;
+  query.data = data;
+  return ioctl(device_fd, UVCIOC_CTRL_QUERY, &query);
+}
+
+
+int NaoCamera::get_uvc_xu(int device_fd, uint8_t control_selector, uint16_t size, uint8_t* data)
+{
+
+  // Extension unit is always 3
+  uint8_t extension_unit_id = 3;
+
+  struct uvc_xu_control_query query;
+  query.unit = extension_unit_id;
+  query.selector = control_selector;
+  query.query = UVC_GET_CUR;
+  query.size = size;
+  query.data = data;
+  return ioctl(device_fd, UVCIOC_CTRL_QUERY, &query);
+}
+
+
 void NaoCamera::setDefaultSettings() {
   std::cout << "NaoCamera: Initializing Camera Parameters to default" << std::endl;
-  if(!setControlSetting(V4L2_CID_HFLIP, hflip_)) std::cerr << "Error setting hflip: " << errno << "\n";
-  if(!setControlSetting(V4L2_CID_VFLIP, vflip_)) std::cerr << "Error setting vflip: " << errno << "\n";
+  //  if(!setControlSetting(V4L2_CID_HFLIP, hflip_)) std::cerr << "Error setting hflip: " << errno << "\n";
+  //  if(!setControlSetting(V4L2_CID_VFLIP, vflip_)) std::cerr << "Error setting vflip: " << errno << "\n";
+
+
+
+  // NEW AUTOEXPOSURE SETTINGS!!!!!!
+  //////////////////////////////////////////
+
+
+  uint8_t aec[] = {0x1, 0x35, 0x03, 0x00, 0x00};
+  set_uvc_xu(videoDeviceFd, 3, 14, 5, aec);
+
+  // Top threshold
+  uint8_t top1[] = {0xFF, 0x3A, 0x0F, 0x00, 0x20};
+  uint8_t top2[] = {0xFF, 0x3A, 0x1B, 0x00, 0x20};
+  set_uvc_xu(videoDeviceFd, 3, 14, 5, top1);
+  set_uvc_xu(videoDeviceFd, 3, 14, 5, top2);
+  set_uvc_xu(videoDeviceFd, 3, 14, 5, top1);
+  set_uvc_xu(videoDeviceFd, 3, 14, 5, top2);
+
+  // 0x24 -- 0x1A   -- LEFT SIDE FIELD
+
+
+  // Bottom threshold
+  uint8_t bot1[] = {0xFF, 0x3A, 0x1E, 0x00, 0x18};
+  uint8_t bot2[] = {0xFF, 0x3A, 0x10, 0x00, 0x18};
+  set_uvc_xu(videoDeviceFd, 3, 14, 5, bot1);
+  set_uvc_xu(videoDeviceFd, 3, 14, 5, bot2);
+  set_uvc_xu(videoDeviceFd, 3, 14, 5, bot1);
+  set_uvc_xu(videoDeviceFd, 3, 14, 5, bot2);
+
+
+
+  // Night mode must be enabled for autoexposure to work properly in dark settings
+  uint8_t nightMode[] = {0xFF, 0x3A, 0x00, 0x00, 0x7C};
+  set_uvc_xu(videoDeviceFd, 3, 14, 5, nightMode);
+  set_uvc_xu(videoDeviceFd, 3, 14, 5, nightMode);
+
+
+  // 4x4 window. Clear the weights for the windows on the top half of the image, so that the autoexposure only uses the bottom half to calculate exposure. 
+  uint8_t window0[] = {0xFF, 0x56, 0x88, 0x00, 0x00};
+  uint8_t window1[] = {0xFF, 0x56, 0x89, 0x00, 0x00};
+  uint8_t window2[] = {0xFF, 0x56, 0x8A, 0x00, 0x00};
+  uint8_t window3[] = {0xFF, 0x56, 0x8B, 0x00, 0x00};
+
+  set_uvc_xu(videoDeviceFd, 3, 14, 5, window0);
+  set_uvc_xu(videoDeviceFd, 3, 14, 5, window1);
+  set_uvc_xu(videoDeviceFd, 3, 14, 5, window2);
+  set_uvc_xu(videoDeviceFd, 3, 14, 5, window3);
+  set_uvc_xu(videoDeviceFd, 3, 14, 5, window0);
+  set_uvc_xu(videoDeviceFd, 3, 14, 5, window1);
+  set_uvc_xu(videoDeviceFd, 3, 14, 5, window2);
+  set_uvc_xu(videoDeviceFd, 3, 14, 5, window3);
+
+
+
+  //////////////////////////////////
+
+
+
+  // Manual Exposure Settings  -- INDOOR FIELDS
+  //////////////////////////////////////////////////
+  /*  
+      uint8_t aec[] = {0x1, 0x35, 0x03, 0x00, 0x01};
+      set_uvc_xu(videoDeviceFd, 3, 14, 5, aec);
+
+      uint8_t manualExp1[] = {0xFF, 0x35, 0x00, 0x00, 0x0F};
+      uint8_t manualExp2[] = {0xFF, 0x35, 0x01, 0x00, 0xFF};
+      uint8_t manualExp3[] = {0xFF, 0x35, 0x02, 0x00, 0xF0};
+
+      set_uvc_xu(videoDeviceFd, 3, 14, 5, manualExp1);
+      set_uvc_xu(videoDeviceFd, 3, 14, 5, manualExp2);
+      set_uvc_xu(videoDeviceFd, 3, 14, 5, manualExp3);
+      set_uvc_xu(videoDeviceFd, 3, 14, 5, manualExp1);
+      set_uvc_xu(videoDeviceFd, 3, 14, 5, manualExp2);
+      set_uvc_xu(videoDeviceFd, 3, 14, 5, manualExp3);
+
+      if(!setControlSetting(V4L2_CID_BRIGHTNESS, brightness)) std::cerr << "Error setting brightness: " << errno << "\n"; // 0-255, default: 55 -- Average brightness for autoexposure algorithms
+   */
+  ///////////////////////////////////////////////////
+
+
+
+
+  /*
+     set_uvc_xu(videoDeviceFd, 3, 14, 5, luminance);
+
+     printf("=============================\n");
+     printf("LUMINANCE: %X %X\n", luminance[3], luminance[4]);
+     printf("=============================\n");
+   */
+
+
+
+
+  // Read the average target luminance
+  uint8_t luminance[] = {0x00, 0x56, 0xA1, 0x00, 0x00};
+  printf("Accessing registers: %X %X\n", luminance[1], luminance[2]);
+  if (get_uvc_xu(videoDeviceFd, 14, 5, luminance)) std::cerr << "Error getting luminance: " << errno << "\n";
+  printf("=============================\n");
+  printf("LUMINANCE: %X %X\n", luminance[3], luminance[4]);
+  printf("=============================\n");
+
+
+
+
+  // Vertical flip
+  uint8_t vflip = vflip_;
+  set_uvc_xu(videoDeviceFd, 3, 13, 2, &vflip); 
+
+  // Horizontal flip
+  uint8_t hflip = hflip_;
+  set_uvc_xu(videoDeviceFd, 3, 12, 2, &hflip);
+
+  // This doesn't seem to do anything
+  //  uint8_t luminance = 60000;
+  //  set_uvc_xu(videoDeviceFd, 3, 8, 2, &luminance);
+
+
+
+  // Turn off autofocus
+  if(!setControlSetting(V4L2_CID_FOCUS_AUTO, 0)) std::cerr << "Error setting auto focus: " << errno << "\n";
+  if(!setControlSetting(V4L2_CID_FOCUS_ABSOLUTE, 0)) std::cerr << "Error setting absolute focus: " << errno << "\n";
+
+
+
+  /*
+
+
+
+  ////// MANUAL WHITE BALANCE
+
+  // White Balance
+  //  if(!setControlSetting(V4L2_CID_AUTO_WHITE_BALANCE, 0)) std::cerr << "Error setting auto white balance: " << errno << "\n";
+  // Only valid for manual white balance. This sets the white balance temperature to a certain value. Note that technically it should have been implemented with V4L2_CID_WHITE_BALANCE_TEMPERATURE but Aldebaran screwed up on their drivers. 
+  //  if(!setControlSetting(V4L2_CID_DO_WHITE_BALANCE, 2700)) std::cerr << "Error setting manual white balance: " << errno << "\n"; // 2700-6500
+
+
+  /// AUTO WHITE BALANCE
 
   if(!setControlSetting(V4L2_CID_AUTO_WHITE_BALANCE, 1)) std::cerr << "Error setting auto white balance: " << errno << "\n";
-  if(!setControlSetting(V4L2_CID_AUTO_WHITE_BALANCE, 1)) std::cerr << "Error setting auto white balance: " << errno << "\n";
-  if(!setControlSetting(V4L2_CID_EXPOSURE_AUTO, 0)) std::cerr << "Error setting exposure auto: " << errno << "\n";
-//  std::cerr << "========= CID EXPOSURE AUTO " << V4L2_CID_EXPOSURE_AUTO << " ===========\n";
-  if(!setControlSetting(V4L2_CID_BACKLIGHT_COMPENSATION, 0x00)) std::cerr << "Error backlight compensation brightness: " << errno << "\n";
 
-  if(!setControlSetting(V4L2_CID_BRIGHTNESS, 220)) std::cerr << "Error setting brightness: " << errno << "\n"; //ONLY VALUE
-  if(!setControlSetting(V4L2_CID_CONTRAST, 53)) std::cerr << "Error setting contrast: " << errno << "\n"; //20-53
-  if(!setControlSetting(V4L2_CID_SATURATION, 128)) std::cerr << "Error setting saturation: " << errno << "\n"; //0-255
-  if(!setControlSetting(V4L2_CID_HUE, 0)) std::cerr << "Error setting hue: " << errno << "\n"; // ONLY VALUE
+  /////// END
 
+  //  std::cout << "\nWB: " << getControlSetting(V4L2_CID_WHITE_BALANCE_TEMPERATURE) << std::endl;
+
+   */
+  // This is probably unnecessary now that we set it in the registers.
+  //  if(!setControlSetting(V4L2_CID_EXPOSURE_AUTO, 0)) std::cerr << "Error setting exposure auto: " << errno << "\n";
+
+
+
+  // This doesn't seem to make a difference
+  //  if(!setControlSetting(V4L2_CID_BACKLIGHT_COMPENSATION, 0)) std::cerr << "Error backlight compensation brightness: " << errno << "\n";
+
+  // Only valid for auto exposure 
+  //  if(!setControlSetting(V4L2_CID_BRIGHTNESS, 0)) std::cerr << "Error setting brightness: " << errno << "\n"; // 0-255, default: 55 -- Average brightness for autoexposure algorithms
+
+  /*
+
+     if(!setControlSetting(V4L2_CID_CONTRAST, 48)) std::cerr << "Error setting contrast: " << errno << "\n"; //20-53 // 53
+     if(!setControlSetting(V4L2_CID_SATURATION, 128)) std::cerr << "Error setting saturation: " << errno << "\n"; //0-255. 0 is like grayscale, 255 is tooo much color
+     if(!setControlSetting(V4L2_CID_HUE, 0)) std::cerr << "Error setting hue: " << errno << "\n"; // ONLY VALUE
+     if(!setControlSetting(V4L2_CID_SHARPNESS, 7)) std::cerr << "Error setting sharpness: " << errno << "\n"; //0-7
+   */
+
+  // These settings only apply for manual exposure
   // We have to set the camera exposure twice because of Aldebaran's world-class hardware.
-  // sanmit: Changing the exposure affects framerate. Increasing above 300 will drop below 30Hz!! Use gain/brightness to compensate. It seems like exposure is like shutter speed. Gain might be like aperture size??? 
-//  const int exposure = 200;
-  if(!setControlSetting(V4L2_CID_EXPOSURE, exposure-1)) std::cerr << "Error setting exposure: " << errno << "\n";
-  if(!setControlSetting(V4L2_CID_EXPOSURE, exposure)) std::cerr << "Error setting exposure: " << errno << "\n";
-  if(!setControlSetting(V4L2_CID_GAIN, 64)) std::cerr << "Error setting gain: " << errno << "\n"; // 0-255         // 32
-  if(!setControlSetting(V4L2_CID_SHARPNESS, 0)) std::cerr << "Error setting sharpness: " << errno << "\n"; //0-7
+  //  if(!setControlSetting(V4L2_CID_EXPOSURE, 300)) std::cerr << "Error setting exposure: " << errno << "\n";
+  //  if(!setControlSetting(V4L2_CID_EXPOSURE, 300)) std::cerr << "Error setting exposure: " << errno << "\n";           // This only works if autoexposure is off (i.e. using manual exposure)
+  //  if(!setControlSetting(V4L2_CID_GAIN, 64)) std::cerr << "Error setting gain: " << errno << "\n"; // 0-255         // 32
+
+
+
+
+
   assert(exposure <= 300); // "If you set exposure to higher than 300 the framerate will drop below 30hz, change the gain instead");
 }
 
@@ -304,11 +512,11 @@ void NaoCamera::displayAvailableSettings() {
   std::cout << "NaoCamera: Displaying Camera Control Parameters:-" << std::endl;
 
   for (queryctrl.id = V4L2_CID_CAMERA_CLASS_BASE;
-       queryctrl.id <= V4L2_CID_CAMERA_CLASS_BASE + 12;
+      queryctrl.id <= V4L2_CID_CAMERA_CLASS_BASE + 12;
       queryctrl.id++) {
     if (0 == ioctl (videoDeviceFd, VIDIOC_QUERYCTRL, &queryctrl)) {
-     if (queryctrl.flags & V4L2_CTRL_FLAG_DISABLED)
-       continue;
+      if (queryctrl.flags & V4L2_CTRL_FLAG_DISABLED)
+        continue;
       printf (" Control %s\n", queryctrl.name);
       if (queryctrl.type == V4L2_CTRL_TYPE_MENU)
         enumerateSettingMenu();
@@ -385,7 +593,7 @@ int NaoCamera::getControlSetting(unsigned int id) {
   struct v4l2_queryctrl queryctrl;
   queryctrl.id = id;
   if(ioctl(videoDeviceFd, VIDIOC_QUERYCTRL, &queryctrl) < 0) {
-    std::cerr << "NaoCamera: Query failed on " << queryctrl.name << "(" << id << ")\n";
+    std::cerr << "NaoCamera (GET): Query failed on " << queryctrl.name << "(" << id << ")\n";
     return -1;
   }
   if(queryctrl.flags & V4L2_CTRL_FLAG_DISABLED) {
@@ -410,7 +618,7 @@ bool NaoCamera::setControlSetting(unsigned int id, int value) {
   struct v4l2_queryctrl queryctrl;
   queryctrl.id = id;
   if(ioctl(videoDeviceFd, VIDIOC_QUERYCTRL, &queryctrl) < 0) {
-    std::cerr << "NaoCamera: Query failed on " << queryctrl.name << "(" << id << ")\n";
+    std::cerr << "NaoCamera (SET): Query failed on " << queryctrl.name << "(" << id << ")\n";
     return false;
   }
   if(queryctrl.flags & V4L2_CTRL_FLAG_DISABLED) {

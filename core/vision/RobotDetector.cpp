@@ -46,7 +46,7 @@ void RobotDetector::detectRobots(){
   for (int o = 0; o < field_edge_detector_.objects.size(); o++){
 
 
-    ObjectCandidate &object = field_edge_detector_.objects[o];
+    VisionObjectCandidate &object = field_edge_detector_.objects[o];
     if (!object.valid || !object.robotCandidate || object.postCandidate) continue;
 
     
@@ -84,18 +84,18 @@ void RobotDetector::detectRobots(){
 
   }
 
-  std::sort(field_edge_detector_.objects.begin(), field_edge_detector_.objects.end(), ObjectCandidate::sortByXi);
+  std::sort(field_edge_detector_.objects.begin(), field_edge_detector_.objects.end(), VisionObjectCandidate::sortByXi);
 
   // Remove duplicates
   for (int o = 0; o < field_edge_detector_.objects.size(); o++){
     
-    ObjectCandidate &object = field_edge_detector_.objects[o];
+    VisionObjectCandidate &object = field_edge_detector_.objects[o];
     if (!object.valid || !object.robotCandidate || object.postCandidate) continue;
 
 
     for (int m = o+1; m < field_edge_detector_.objects.size(); m++){
       
-      ObjectCandidate &object2 = field_edge_detector_.objects[m];
+      VisionObjectCandidate &object2 = field_edge_detector_.objects[m];
       if (!object2.valid || !object2.robotCandidate || object2.postCandidate) continue;
 
       // One of the objects is a duplicate. 
@@ -124,7 +124,7 @@ void RobotDetector::detectRobots(){
 
   for (int o = 0; o < field_edge_detector_.objects.size(); o++){
 
-    ObjectCandidate &object = field_edge_detector_.objects[o];
+    VisionObjectCandidate &object = field_edge_detector_.objects[o];
 
 
 

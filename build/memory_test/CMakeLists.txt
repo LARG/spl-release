@@ -11,5 +11,5 @@ set(SRCS
   ${SRC_DIR}/memory/StreamBuffer.cpp
 )
 
-qi_create_bin(memory_test ${SRCS})
+add_executable(memory_test ${SRCS})
 target_link_libraries(memory_test pthread dl rt ${LINK_LIBS})

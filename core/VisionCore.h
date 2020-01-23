@@ -142,12 +142,15 @@ private:
   void enableLogging();
   void disableLogging();
   void optionallyWriteLog();
+
+  bool auto_wb_flag_;
+
 private:
   void init(int team_num, int player_num);
   void initMemory();
   void initModules(LocalizationMethod::Type locMethod);
   bool isToolCore();
-  Timer vtimer_, logtimer_;
+  Timer vtimer_, logtimer_, atimer_;
 #ifndef SWIG
   std::unique_ptr<ToolPacket> logging_selections_;
 #endif

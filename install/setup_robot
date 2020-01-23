@@ -39,12 +39,9 @@ def filloutID(name,robotID,d):
       
 def setupNetworking(ip,robotID,wireless_only):
   tempdir = makeTempDir()
+  os.chdir('%s/install' % NAO_HOME)
   try:
     scriptpath = '%s/install/script_wireless.sh' % NAO_HOME
-    if not wireless_only:
-      filloutID('utwired',robotID,tempdir)
-    filloutID('utwireless',robotID,tempdir)
-    copyFiles(ip,os.path.join(tempdir,'utwire*'))
     copyFiles(ip,'../data/scripts/wpa_supplicant.conf','~/wpa_supplicant.conf.tmp')
     runLocalScriptRemotely(ip, scriptpath,output=True)
   finally:
@@ -59,14 +56,17 @@ def compile(geode=False):
   runLocalCommand(cmd)
   os.chdir(origDir)
 
-def copyRobot(ip,robotID,geode=False):
+
+def copyRobot(ip, robot_id, geode=False):
+  """Copies all code, configs, color tables, and scripts to robot."""
   os.chdir('%s/build/' % NAO_HOME)
-  origDir = os.getcwd()
-  cmd = './copy_robot %s everything --id %s' % (ip,robotID)
+  orig_dir = os.getcwd()
+  cmd = './copy_robot %s install --id %s' % (ip, robot_id)
   if geode:
     cmd += ' --geode'
   runLocalCommand(cmd)
-  os.chdir(origDir)
+  os.chdir(orig_dir)
+
 
 def setupVim(ip):
   copyFiles(ip,'%s/install/vim.tar.gz' % NAO_HOME)
@@ -93,6 +93,14 @@ def setupGccLibs(ip):
     root=True
   )
 
+def setupStartup(ip):
+  runRemoteCommand(ip,'mkdir -p ~/.config/systemd/user')
+  copyFiles(ip,'../data/scripts/ut_motion.service','.config/systemd/user/')
+  copyFiles(ip,'../data/scripts/ut_vision.service','.config/systemd/user/')
+  runRemoteCommand(ip,'systemctl --user daemon-reload')
+  runRemoteCommand(ip,'systemctl --user enable ut_motion.service')
+  runRemoteCommand(ip,'systemctl --user enable ut_vision.service')
+
 def main(options):
   if options.include_ssh:
     setupPasswordlessSSH(options.ip)
@@ -108,16 +116,15 @@ def main(options):
       print 'compiling lib and bins for robot'
       compile()
     runRemoteCommand(options.ip,'mkdir -p lua logs data bin data/mof data/config scripts')
-    copyRobot(options.ip,options.id)
+    copyRobot(options.ip, options.id)
     setupProfile(options.ip)
-    copyFiles(options.ip,'../data/scripts/bootprogress_100','scripts/')
     copyFiles(options.ip,'../data/scripts/autoload.ini','scripts/')
-    copyFiles(options.ip,'../data/scripts/naoqi','scripts/')
     setupGccLibs(options.ip)
-    setupVim(options.ip)
+    #setupVim(options.ip)
     setupCaffe(options.ip)
-    runLocalScriptRemotely(options.ip, '%s/install/script_setup.sh' % NAO_HOME)
+    setupStartup(options.ip)
     print "The robot's server will now reboot to force a cache write."
+    runLocalScriptRemotely(options.ip, '%s/install/script_setup.sh' % NAO_HOME, args=options.id)
   print 'complete'
 
 

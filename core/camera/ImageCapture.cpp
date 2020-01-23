@@ -88,6 +88,16 @@ void ImageCapture::testCameras() {
   }
 }
 
+void ImageCapture::enableAutoWB(){
+  top_camera_->enableAutoWB();
+  bottom_camera_->enableAutoWB();
+}
+
+void ImageCapture::lockWB(){
+  top_camera_->lockWB();
+  bottom_camera_->lockWB();
+}
+  
 void ImageCapture::dequeueThread() {
   while(true) {
     std::unique_lock<std::mutex> lock(buffer_mutex_);

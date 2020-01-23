@@ -7,7 +7,7 @@ RobotConfig::RobotConfig() {
   team = 1;
   robot_id = 0;
   posX = posY = posZ = orientation = 0;
-  team_udp = 10101;
+  team_udp = 10001;
   team_broadcast_ip = CommInfo::TEAM_BROADCAST_IP;
   game_controller_ip = CommInfo::GAME_CONTROLLER_IP;
   walk_type = getName(RUNSWIFT2014_WALK);

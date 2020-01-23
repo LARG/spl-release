@@ -6,7 +6,7 @@
 
    Determine the position of the legs for this t in the walk cycle
 */
-#define FPS 100.0f
+#define FPS 83.0f
 class WalkCycle {
    public:
       WalkCycle();

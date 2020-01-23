@@ -8,8 +8,8 @@
 #define NAOINTERFACE_NAOINTERFACE_H
 
 #include <boost/shared_ptr.hpp>
-#include <alcommon/almodule.h>
-#include <alaudio/alsoundextractor.h>
+// #include <alcommon/almodule.h>
+// #include <alaudio/alsoundextractor.h>
 #include <string>
 
 #include <memory/MemoryFrame.h>
@@ -29,6 +29,7 @@
 #include "dcmwrapper.h"
 #include "almotionwrapper.h"
 
+/*
 namespace AL
 {
   class ALBroker;
@@ -39,17 +40,18 @@ namespace AL
   class DCMProxy;
   class ALSonarProxy;
 }
-
+*/
 /**
  * DESCRIBE YOUR CLASS HERE
  */
-class naointerface : public AL::ALModule
+class naointerface // : public AL::ALModule
 {
   public:
     /**
      * Default Constructor.
      */
-     naointerface(boost::shared_ptr<AL::ALBroker> broker, const std::string& name);
+     // naointerface(boost::shared_ptr<AL::ALBroker> broker, const std::string& name);
+     naointerface(const std::string& name);
 
     /**
      * Destructor.
@@ -80,9 +82,9 @@ class naointerface : public AL::ALModule
     
 
     // Used for fast memory access
-    boost::shared_ptr<AL::ALMemoryFastAccess> fast_sensor_access_;
-    boost::shared_ptr<AL::ALMemoryProxy> al_memory_;
-    boost::shared_ptr<AL::ALMotionProxy> al_motion_;
+    // boost::shared_ptr<AL::ALMemoryFastAccess> fast_sensor_access_;
+    // boost::shared_ptr<AL::ALMemoryProxy> al_memory_;
+    // boost::shared_ptr<AL::ALMotionProxy> al_motion_;
     std::vector<std::string> sensor_keys_;
     std::vector<float> sensor_values_;
 
@@ -90,8 +92,8 @@ class naointerface : public AL::ALModule
     DCMWrapper* dcmWrap_;
     ALMotionWrapper* al_motion_wrap_;
 
-    boost::shared_ptr<AL::ALSonarProxy> sonar_proxy_;
-    boost::shared_ptr<AL::ALTextToSpeechProxy> tts_proxy_;
+    // boost::shared_ptr<AL::ALSonarProxy> sonar_proxy_;
+    // boost::shared_ptr<AL::ALTextToSpeechProxy> tts_proxy_;
     
     //sound detected
     //boost::shared_ptr<ALSoundBasedReaction> sound_detector_;
@@ -102,8 +104,8 @@ class naointerface : public AL::ALModule
     void setAllPositions(float positions[NUM_JOINTS]);
    
     // Used for postprocess sync with the DCM
-    ProcessSignalConnection dcm_postprocess_connection_;
-    ProcessSignalConnection dcm_preprocess_connection_;
+    // ProcessSignalConnection dcm_postprocess_connection_;
+    // ProcessSignalConnection dcm_preprocess_connection_;
 
     MemoryFrame *memory_;
     Lock *motion_lock_;

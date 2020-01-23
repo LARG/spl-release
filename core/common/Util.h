@@ -4,6 +4,7 @@
 #include <initializer_list>
 #include <common/tinyformat.h>
 #include <cassert>
+#include <vector>
 
 namespace util {
 

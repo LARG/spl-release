@@ -17,7 +17,7 @@
 #define JERSEY_HEIGHT 160
 #define MAX_FOCUS_AREA_COUNT 20
 #define MAX_FOCUS_AREA 3000
-#define FOVx (60.97 / 180.0 * M_PI)
-#define FOVy (47.64 / 180.0 * M_PI)
+#define FOVx (56.3 / 180.0 * M_PI)
+#define FOVy (43.7 / 180.0 * M_PI)
 
 #endif

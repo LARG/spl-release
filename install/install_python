@@ -51,7 +51,9 @@ install_python_core_source() {
   rm -rf $python_name
   $unzipcmd $filename
   cd $python_directory
-  OPT=-m32 LDFLAGS=-m32 ./configure --enable-shared --enable-unicode=ucs4 --prefix=/opt/pym32 CFLAGS=-m32 CC='gcc -m32' BASECFLAGS='-m32'
+  echo ac_cv_file__dev_ptmx=no > $NAO_HOME/install/Python-2.7.5/config.site
+  echo ac_cv_file__dev_ptc=no >> $NAO_HOME/install/Python-2.7.5/config.site
+  CONFIG_SITE=$NAO_HOME/install/Python-2.7.5/config.site OPT=-m32 LDFLAGS=-m32 ./configure --enable-shared --enable-unicode=ucs4 --prefix=/opt/pym32 --host=i686-sbr-linux --build=x86_64-pc-linux-gnu --disable-ipv6 CFLAGS=-m32 CC='gcc -m32' BASECFLAGS='-m32'
   make
   copy_python_core
 }
@@ -132,8 +134,15 @@ remove_tests() {
   rm -rf $module_dir/scipy/tests $module_dir/scipy/*/tests $module_dir/scipy/*/*/tests $module_dir/scipy/*/*/*/tests
 }
 
-install_python_core_prebuilt
-setup_dependencies
+# install_python_core_prebuilt
+install_python_core_source
+# setup_dependencies
+# install_numpy_prebuilt
+# install_scipy_prebuilt
 install_numpy_prebuilt
 install_scipy_prebuilt
+
+# Caffe installs a more recent networkx
+# which causes problems
+pip install networkx==2.0
 remove_tests

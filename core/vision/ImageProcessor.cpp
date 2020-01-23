@@ -165,18 +165,18 @@ void ImageProcessor::processFrame(){
   // Horizon calculation
   tlog(30, "Calculating horizon line");
   updateTransform();
-  VisionTimer::Stop("ImageProcessor(%s)::transforms", camera_);
   HorizonLine horizon = HorizonLine::generate(iparams_, cmatrix_, 20000);
   vblocks_.robot_vision->horizon = horizon;
-
+  VisionTimer::Stop("ImageProcessor(%s)::transforms", camera_);
+  
   if (DEBUG) std::cout << "ImageProcessor::processFrame: c = " << std::endl;
+  VisionTimer::Start(30, "ImageProcessor(%s)::classification", camera_);
 
   tlog(30, "Classifying Image");
   color_segmenter_->setHorizon(horizon);
 
   if (DEBUG) std::cout << "ImageProcessor::processFrame: d = " << std::endl;
 
-  VisionTimer::Start(30, "ImageProcessor(%s)::classification", camera_);
   if(!color_segmenter_->classifyImage(color_table_)) {
     VisionTimer::Stop("ImageProcessor(%s)::classification", camera_);
     VisionTimer::Stop("ImageProcessor(%s)::frame", camera_);
@@ -192,26 +192,28 @@ void ImageProcessor::processFrame(){
   if (DEBUG) std::cout << "ImageProcessor::processFrame: A = " << std::endl;
   
   VisionTimer::Stop("ImageProcessor(%s)::runs", camera_);
-  if(vblocks_.robot_state->WO_SELF == WO_TEAM_COACH) {
-    tlog(30, "COACH image: checking for balls in top camera");
-    ball_detector_->setHorizon(horizon);
-    roi_detector_->findBallROIs();
-    ball_detector_->findBall(roi_detector_->ballROIs);
-    VisionTimer::Stop("ImageProcessor(%s)::frame", camera_);
-    return;
-  }
+  
+//  if(vblocks_.robot_state->WO_SELF == WO_TEAM_COACH) {
+//    tlog(30, "COACH image: checking for balls in top camera");
+//    ball_detector_->setHorizon(horizon);
+//    roi_detector_->findBallROIs();
+//    ball_detector_->findBall(roi_detector_->ballROIs);
+//    VisionTimer::Stop("ImageProcessor(%s)::frame", camera_);
+//    return;
+//  }
 
   // special-cased vision for penalty shot keeper
-  if (DEBUG) std::cout << "ImageProcessor::processFrame: B = " << std::endl;
-  bool isPenaltyKeeper = vblocks_.game_state->isPenaltyKick && vblocks_.robot_state->WO_SELF == KEEPER;
-  bool doNormalBallDetection = true;
-  if(isPenaltyKeeper) {
-    doNormalBallDetection = penalty_keeper_image_processor_->penaltyKeeperProcessFrame();
-  }
-  if (!doNormalBallDetection) {
-    return;
-  }
-  if (DEBUG) std::cout << "ImageProcessor::processFrame: C" << std::endl;
+//  if (DEBUG) std::cout << "ImageProcessor::processFrame: B = " << std::endl;
+//  bool isPenaltyKeeper = vblocks_.game_state->isPenaltyKick && vblocks_.robot_state->WO_SELF == KEEPER;
+//  bool doNormalBallDetection = true;
+//  if(isPenaltyKeeper) {
+//    doNormalBallDetection = penalty_keeper_image_processor_->penaltyKeeperProcessFrame();
+//  }
+//  if (!doNormalBallDetection) {
+//    VisionTimer::Stop("ImageProcessor(%s)::frame", camera_);
+//    return;
+//  }
+//  if (DEBUG) std::cout << "ImageProcessor::processFrame: C" << std::endl;
 
   tlog(30, "Preprocessing line points and forming blobs");
   VisionTimer::Start(30, "ImageProcessor(%s)::preProcess", camera_);
@@ -220,26 +222,30 @@ void ImageProcessor::processFrame(){
 
   if (DEBUG) std::cout << "ImageProcessor::processFrame: D" << std::endl;
 
-  if(SAVE_IMGS) {
-    std::string filepath;
-    if(camera_ == Camera::TOP) {
-      filepath = util::format("%s/log_images/post_distortion/top%02i.png", util::env("NAO_HOME"), topFrameCounter_);
-      saveImg(filepath);
-    }
-    else {
-      filepath = util::format("%s/log_images/post_distortion/bottom%02i.png", util::env("NAO_HOME"), bottomFrameCounter_);
-    }
-  }
+//  if(SAVE_IMGS) {
+//    std::string filepath;
+//    if(camera_ == Camera::TOP) {
+//      filepath = util::format("%s/log_images/post_distortion/top%02i.png", util::env("NAO_HOME"), topFrameCounter_);
+//      saveImg(filepath);
+//    }
+//    else {
+//      filepath = util::format("%s/log_images/post_distortion/bottom%02i.png", util::env("NAO_HOME"), bottomFrameCounter_);
+//    }
+//  }
 
   if (DEBUG) std::cout << "ImageProcessor::processFrame: E" << std::endl;
 
   // Field needs to happen before ball detection, goal detection, and robot detection
+  
+  
+  VisionTimer::Start(30, "ImageProcessor(%s)::fieldEdges", camera_);
   field_edge_detector_->detectFieldEdges();
-
+  VisionTimer::Stop("ImageProcessor(%s)::fieldEdges", camera_);
+  
   tlog(30, "Detecting balls");
+  VisionTimer::Start(30, "ImageProcessor(%s)::ball_rois", camera_);
   ball_detector_->setHorizon(horizon);
   roi_detector_->setHorizon(horizon);
-  VisionTimer::Start(30, "ImageProcessor(%s)::ball_rois", camera_);
   if (DEBUG) std::cout << "ImageProcessor::processFrame: F" << std::endl;
   roi_detector_->findBallROIs();
   VisionTimer::Stop("ImageProcessor(%s)::ball_rois", camera_);
@@ -253,9 +259,7 @@ void ImageProcessor::processFrame(){
   blob_detector_->formWhiteLineBlobs();
   VisionTimer::Stop("ImageProcessor(%s)::blobs", camera_);
 
-  VisionTimer::Start(30, "ImageProcessor(%s)::lines", camera_);
-  tlog(30, "Detecting White Lines");
-  
+  VisionTimer::Start(30, "ImageProcessor(%s)::cross_detection", camera_);
   if (DEBUG) std::cout << "ImageProcessor::processFrame: I" << std::endl;
   vblocks_.robot_vision->lookForCross = true; // Always enabled for now
   if(camera_ == Camera::TOP && vblocks_.robot_vision->lookForCross) {
@@ -265,7 +269,13 @@ void ImageProcessor::processFrame(){
   }
   else tlog(30, "Skipping cross detection");
 
+  VisionTimer::Stop("ImageProcessor(%s)::cross_detection", camera_);
+  
+  VisionTimer::Start(30, "ImageProcessor(%s)::lines", camera_);
+  tlog(30, "Detecting White Lines");
+  
   if (DEBUG) std::cout << "ImageProcessor::processFrame: K" << std::endl;
+  VisionTimer::Start(30, "ImageProcessor(%s)::lines", camera_);
   line_detector_->detectLines(horizon);
   VisionTimer::Stop("ImageProcessor(%s)::lines", camera_);
 
@@ -288,10 +298,13 @@ void ImageProcessor::processFrame(){
 //  }
 #endif
 
-  robot_detector_->detectRobots();
-
-
   VisionTimer::Stop("ImageProcessor(%s)::goals", camera_);
+  
+  
+  VisionTimer::Start(30, "ImageProcessor(%s)::robots", camera_);
+  robot_detector_->detectRobots();
+  VisionTimer::Stop("ImageProcessor(%s)::robots", camera_);
+
 
   tlog(21, "Vision frame process complete");
   VisionTimer::Stop("ImageProcessor(%s)::frame", camera_);

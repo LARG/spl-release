@@ -20,6 +20,10 @@ CrossDetector::CrossDetector(DETECTOR_DECLARE_ARGS, ColorSegmenter& segmenter, B
 }
 
 void CrossDetector::detectCrosses() {
+  
+
+  VisionTimer::Start(47, "CrossDetector(%s)::blobs", camera_);
+  
   int mergeCount = 100;
   uint16_t mergeIndex[mergeCount];
   BlobCollection blobsUnmerged, blobs;
@@ -36,20 +40,33 @@ void CrossDetector::detectCrosses() {
       }
     }
   }
+  VisionTimer::Stop("CrossDetector(%s)::blobs", camera_);
+
+  
+  VisionTimer::Start(47, "CrossDetector(%s)::all_crosses", camera_);
   // TODO: Sanmit: Cross offset points to our PK cross. Does this mean it bypasses localization??? Need to look into it. Also it's unlikely we'd ever see 2 crosses in the same frame. 
-  for(int i = 0; i < NUM_CROSSES; i++) {
-    WorldObject* cross = &vblocks_.world_object->objects_[i + CROSS_OFFSET];
-    detectCross(blobs, cross);
-  }
+  // for(int i = 0; i < NUM_CROSSES; i++) {
+  //   WorldObject* cross = &vblocks_.world_object->objects_[i + CROSS_OFFSET];
+  detectCross(blobs);  // , cross);
+  // }
+
+
+  VisionTimer::Stop("CrossDetector(%s)::all_crosses", camera_);
+
 }
 
-void CrossDetector::detectCross(BlobCollection& blobs, WorldObject* cross) {
+void CrossDetector::detectCross(BlobCollection& blobs) {  // , WorldObject* cross) {
   int hstep, vstep;
   color_segmenter_.getStepSize(hstep, vstep);
 
+  
   Pose2D self(getself()->orientation, getself()->loc.x, getself()->loc.y); // release
   //Pose2D self(0, 250 - HALF_FIELD_X, 0); // Standard goalie position
   for(uint16_t i = 0; i < blobs.size(); i++) {
+
+
+    // VisionTimer::Start(47, "CrossDetector(%s)::cross_blob", camera_);
+
     Blob& blob = blobs[i];
     int left = blob.xi, right = blob.xf, top = blob.yf, bottom = blob.yi;
     int width = right - left, height = top - bottom;
@@ -81,6 +98,10 @@ void CrossDetector::detectCross(BlobCollection& blobs, WorldObject* cross) {
       continue;
     }
 
+
+    // VisionTimer::Stop("CrossDetector(%s)::cross_blob", camera_);
+
+    // VisionTimer::Start(47, "CrossDetector(%s)::cross_pos", camera_);
     Position 
       lpos = cmatrix_.getWorldPosition(left, (top + bottom) / 2),
       rpos = cmatrix_.getWorldPosition(right, (top + bottom) / 2),
@@ -90,8 +111,23 @@ void CrossDetector::detectCross(BlobCollection& blobs, WorldObject* cross) {
 
     Pose2D absCenter = Pose2D(relCenter.x, relCenter.y).relativeToGlobal(self);
 
+
+    // VisionTimer::Stop("CrossDetector(%s)::cross_pos", camera_);
+
+
+
+    // VisionTimer::Start(47, "CrossDetector(%s)::cross_gpct", camera_);
+
     float wWidth = (lpos - rpos).abs(), wHeight = (tpos - bpos).abs();
-    float pDist = (absCenter.translation - Vector2<float>(cross->loc.x, cross->loc.y)).abs();
+    WorldObject* cross1 = &vblocks_.world_object->objects_[CROSS_OFFSET];
+    WorldObject* cross2 = &vblocks_.world_object->objects_[1 + CROSS_OFFSET];
+    float pDist = std::min( (absCenter.translation - Vector2<float>(cross1->loc.x, cross1->loc.y)).abs(),
+                            (absCenter.translation - Vector2<float>(cross2->loc.x, cross2->loc.y)).abs());
+    /* float pDist = 1000000;
+    for(int i = 0; i < NUM_CROSSES; i++) {
+      WorldObject* cross = &vblocks_.world_object->objects_[i + CROSS_OFFSET];
+      pDist = std::min(pDist, (absCenter.translation - Vector2<float>(cross->loc.x, cross->loc.y)).abs());
+    } */
     if(vblocks_.game_state->state() != PLAYING) pDist = 0; // This shouldn't be used when not in playing, helps with debugging
 
     float gtopleft = getGreenPercentage(left - wideXRange, left - narrowXRange, top + narrowYRange, top + wideYRange, hstep, vstep);
@@ -105,8 +141,14 @@ void CrossDetector::detectCross(BlobCollection& blobs, WorldObject* cross) {
     float gbottommid = getGreenPercentage(left - narrowXRange, right + narrowXRange, bottom - wideYRange, bottom - narrowYRange, hstep, vstep);
     float gbottomright = getGreenPercentage(right + narrowXRange, right + wideXRange, bottom - wideYRange, bottom - narrowYRange, hstep, vstep);
 
+
+    // VisionTimer::Stop("CrossDetector(%s)::cross_gpct", camera_);
+
+
     tlog(47, "Blob %i (%i,%i to %i,%i) chosen for cross detection", i, blob.xi, blob.yi, blob.xf, blob.yf);
     tlog(47, "Self at %2.f,%2.f, candidate at %2.f,%2.f", self.translation.x, self.translation.y, absCenter.translation.x, absCenter.translation.y);
+
+    // VisionTimer::Start(47, "CrossDetector(%s)::cross_likelihood", camera_);
 
     float prob = estimator_.getLikelihood(
      gtopleft,
@@ -123,6 +165,7 @@ void CrossDetector::detectCross(BlobCollection& blobs, WorldObject* cross) {
     );
     //estimator_.printLast();
     estimator_.logLast(47, textlogger);
+    // VisionTimer::Stop("CrossDetector(%s)::cross_likelihood", camera_);
 
     if(prob > .4) {
       tlog(47, "Blob %i selected as cross", i);

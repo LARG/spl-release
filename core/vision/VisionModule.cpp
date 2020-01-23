@@ -65,7 +65,8 @@ bool VisionModule::areFeetOnGround() {
 void VisionModule::processFrame() {
   // reset world objects
   cache_.world_object->reset();
-  
+
+
   if(!areFeetOnGround()) {
     return;
   }

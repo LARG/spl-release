@@ -5,7 +5,6 @@
 SET(RSWALK_SRCS
    
    # Vision
-   perception/vision/RSCamera.cpp
    perception/vision/VisionDefs.cpp
 
    # Kinematics
@@ -41,6 +40,10 @@ SET(RSWALK_SRCS
    NullGenerator.cpp
    RefPickupGenerator.cpp
    StandGenerator.cpp
+
+   # GSL - these will be deprecated soon with new rllab recorder
+   # eigen_trajectory.h
+   # eigen_trajectory_recorder.cpp
    )
 
 ############################ CHECK LIBRARY / EXECUTABLE OPTION

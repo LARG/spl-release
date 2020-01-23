@@ -82,10 +82,10 @@ def copyFiles(ip,files,dest='',root=False):
 
 copyFile = copyFiles
 
-def runLocalScriptRemotely(ip, scriptpath,output=None):
+def runLocalScriptRemotely(ip, scriptpath, output=None, args=""):
   copyFiles(ip,scriptpath)
   scriptname = os.path.basename(scriptpath)
-  runRemoteCommand(ip,'bash %s && rm %s' % (scriptname,scriptname),root=True,output=output)
+  runRemoteCommand(ip,'bash %s %s && rm %s' % (scriptname,args,scriptname),root=True,output=output)
 
 def ask(prompt):
   while True:

@@ -17,7 +17,7 @@ class CrossDetector : public ObjectDetector {
     void init(TextLogger* tl){textlogger = tl;};
 
   private:
-    void detectCross(BlobCollection& blobs, WorldObject* cross);
+    void detectCross(BlobCollection& blobs);  // , WorldObject* cross);
     TextLogger* textlogger;
 
     ColorSegmenter& color_segmenter_;

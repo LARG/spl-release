@@ -8,6 +8,8 @@ class GameStateBlock;
 class RobotStateBlock;
 class SensorBlock;
 class SpeechBlock;
+class CameraBlock;
+
 
 class ButtonModule: public Module {
  public:
@@ -24,6 +26,7 @@ class ButtonModule: public Module {
   RobotStateBlock *robot_state_;
   SensorBlock *sensors_;
   SpeechBlock *speech_;
+  CameraBlock *camera_;
 
   static const float MAX_CLICK_INTERVAL;
   static const float MIN_CLICK_TIME;
@@ -53,6 +56,7 @@ class ButtonModule: public Module {
   ButtonInfo center_;
   ButtonInfo left_bumper_;
   ButtonInfo right_bumper_;
+  ButtonInfo head_middle_;
 
  private:
   void processCenterPresses();

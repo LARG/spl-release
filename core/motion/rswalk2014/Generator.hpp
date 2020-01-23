@@ -6,6 +6,7 @@
 #include "types/Odometry.hpp"
 #include "types/SensorValues.hpp"
 #include "BodyModel.hpp" // Removed motion/generator - Josiah
+#include <motion/RSWalkParameters.h>
 
 /**
  * Generator - responsible for tranforming ActionCommands into joint angles.
@@ -43,6 +44,8 @@ class Generator {
        * reset - return to neutral stance and become inactive immediately
        */
       virtual void reset() = 0;
+
+//      void setWalkParameters(const RSWalkParameters & params);
 
       /**
        * stop - like reset, but time is given to transition to the neutral stance

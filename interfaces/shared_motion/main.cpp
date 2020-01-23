@@ -22,6 +22,8 @@ void restartVision(int argc, char* argv[]);
 
 double getSystemTime();
 
+
+
 int main(int argc, char* argv[]) {
   std::cout << "Running Shared Motion\n";
   atexit(&handleExit);
@@ -49,13 +51,13 @@ int main(int argc, char* argv[]) {
 
   //create the motion core
   core = new MotionCore(CORE_INIT,true,team_num,player_num);
-  
+
   FrameInfoBlock *vision_frame_info;
   core->memory_.getOrAddBlockByName(vision_frame_info,"vision_frame_info",MemoryOwner::VISION);
   FrameInfoBlock *frame_info;
   core->memory_.getOrAddBlockByName(frame_info,"frame_info");
   WalkRequestBlock *walk_request;
-  core->memory_.getOrAddBlockByName(walk_request,"sync_walk_request",MemoryOwner::SYNC);
+  core->memory_.getOrAddBlockByName(walk_request,"sync_walk_request", MemoryOwner::SYNC);
 
   core->memory_.setBlockLogging("frame_info",true);
   //core->memory_.setBlockLogging("body_model",true);
@@ -64,12 +66,12 @@ int main(int argc, char* argv[]) {
   //core->memory_.setBlockLogging("walk_request",true);
   //core->memory_.setBlockLogging("processed_sensors",true);
   //core->memory_.setBlockLogging("processed_joint_angles",true);
-  
+
   lock = new Lock(Lock::getLockName(&(core->memory_),LOCK_MOTION));
   core->memory_.motion_vision_lock_ = new Lock(Lock::getLockName(&(core->memory_),LOCK_MOTION_VISION),true);
 
   double vision_start_time = frame_info->seconds_since_start + vision_start_time_delay;
-  
+
   while (true) {
     lock->lock();
     while (core->alreadyProcessedFrame())
@@ -78,6 +80,7 @@ int main(int argc, char* argv[]) {
     core->preProcess();
 
     //lock->unlock();
+
 
     core->receiveData(); // reads in walk and joint requests from vision
 
@@ -168,3 +171,4 @@ void restartVision(int argc, char* argv[]) {
   //wait(&status);
   //std::cout << "status: " << status << std::endl;
 }
+

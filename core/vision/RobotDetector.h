@@ -13,7 +13,7 @@
 #include <vision/structures/RobotCandidate.h>
 #include <vision/estimators/RobotEstimator.h>
 #include <vision/FieldEdgeDetector.h>
-#include <vision/structures/ObjectCandidate.h>
+#include <vision/structures/VisionObjectCandidate.h>
 #include <common/RelayStruct.h>
 
 /// @ingroup vision
