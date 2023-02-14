@@ -36,7 +36,7 @@ class LogWriter : public LogAccessor {
     int type_;
     int frame_id_ = 0;
 
-    bool using_buffers_, use_all_blocks_;
+    bool using_buffers_, use_all_blocks_, buffer_to_disk_=false;
     StreamBuffer main_buffer_;
     LogMetadata mdata_;
 };
@@ -48,7 +48,7 @@ class StreamLogWriter : public LogWriter {
 
 class FileLogWriter : public LogWriter {
   public:
-    FileLogWriter() : LogWriter(false, NULL, true) { }
+    FileLogWriter() : LogWriter(false, NULL, true) { buffer_to_disk_=true; }
 };
 
 class LogViewer;

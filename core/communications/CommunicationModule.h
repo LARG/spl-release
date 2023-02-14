@@ -74,16 +74,10 @@ class CommunicationModule: public Module {
   JointCommandBlock *joint_commands_;
     
   //Udp for robot team communication
-  //ThreadedUDPSocket teamUDP;
   UDPWrapper* teamUDP;
   void listenTeamUDP();
 
-  //Udp for coach communication
-  UDPWrapper* coachUDP;
-  void listenCoachUDP();
-
   //Udp for the tools commands to the robot
-  //ThreadedUDPSocket toolUDP;
   UDPWrapper* toolUDP;
   void listenToolUDP();
   void handleCameraParamsMessage(CameraParams &params, char *msg);
@@ -91,7 +85,6 @@ class CommunicationModule: public Module {
   void handleLoggingBlocksMessage(const ToolPacket& tp);
 
   //Messages from game controller
-  //ThreadedUDPSocket gameControllerUDP;
   UDPWrapper *gcDataUDP, *gcReturnUDP;
   void listenGameControllerUDP();
   void sendGameControllerUDP();
@@ -114,7 +107,7 @@ private:
   char *log_buffer_;
   std::unique_ptr<std::thread> stream_thread_;
   uint32_t vtime_;
-  Timer coachTimer_, teamTimer_, gcTimer_;
+  Timer teamTimer_, gcTimer_;
   std::unique_ptr<TCPServer> tcpserver_;
   bool connected_, stopping_stream_ = false;
 };

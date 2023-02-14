@@ -43,7 +43,7 @@ class VisionModule: public Module {
 #ifndef SWIG
     MemoryCache cache_;
     std::unique_ptr<VisionBlocks> vblocks_;
-    std::unique_ptr<ImageProcessor> top_processor_ , bottom_processor_;
+    std::shared_ptr<ImageProcessor> top_processor_ , bottom_processor_;
 #endif
 
     bool isBottomCamera();

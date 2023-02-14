@@ -29,9 +29,7 @@
 
 #define MAX_MEM_WRITE_SIZE MAX_STREAMING_MESSAGE_LEN
 
-#define PACKETS_PER_SECOND 1
-#define SECONDS_PER_PACKET (1.0f/PACKETS_PER_SECOND)
-#define FRAMES_PER_PACKET (30/PACKETS_PER_SECOND)
+#define SECONDS_PER_PACKET 2
 #define PACKET_INVALID_DELAY 10
 #define LOC_INVALID_DELAY 10
 
@@ -134,11 +132,17 @@ void CommunicationModule::processFrame() {
 
 void CommunicationModule::sendGameControllerUDP() {
   RoboCupGameControlReturnData packet;
-  packet.team = game_state_->gameContTeamNum;
-  packet.player = robot_state_->WO_SELF;
-  packet.message = GAMECONTROLLER_RETURN_MSG_ALIVE;
+  packet.playerNum = robot_state_->WO_SELF;
+  packet.teamNum = game_state_->gameContTeamNum;
+  auto rd = team_packets_->relayData[robot_state_->WO_SELF];
+  packet.fallen = rd.bvrData.fallen();
+  packet.pose[0] = rd.locData.robotX;
+  packet.pose[1] = rd.locData.robotY;
+  packet.pose[2] = rd.locData.orientation();
+  packet.ballAge = rd.bvrData.ballMissed/30.0;
+  packet.ball[0] = rd.locData.balls[0];
+  packet.ball[1] = rd.locData.balls[1];
   bool res = gcReturnUDP->send(packet);
-  //std::cout << "Sending GC message" << std::endl;
   if(!res) std::cerr << "Failed status message to Game Controller." << std::endl;
 }
 
@@ -151,37 +155,27 @@ void CommunicationModule::listenTeamUDP() {
   tlog(40, "Checking ignore comms: %i", this->robot_state_->ignore_comms_);
   if(this->robot_state_->ignore_comms_) return;
  
-  bool listener = this->robot_state_->WO_SELF == WO_TEAM_LISTENER;
-  tlog(40, "Packet Robot Number: %i, Self: %i, Min: %i, Max: %i\n", message.playerNum, this->robot_state_->WO_SELF, WO_TEAM_FIRST, WO_TEAM_LAST);
+  tlog(40, "Packet Robot Number: %i, Self: %i, Min: %i, Max: %i\n",
+          message.playerNum, this->robot_state_->WO_SELF, WO_TEAM_FIRST,
+          WO_TEAM_LAST);
   tlog(40, "GC Team: %i, Self: %i\n", message.teamNum, this->game_state_->gameContTeamNum);
   // not us but our team, and valid player num
   if (message.playerNum != this->robot_state_->WO_SELF &&
       message.teamNum == this->game_state_->gameContTeamNum &&
-      //tp.rbTeam == this->robot_state_->team_ &&
       message.playerNum >= WO_TEAM_FIRST && message.playerNum <= WO_TEAM_LAST) {
     tlog(40, "Converting packet.");
     TeamPacket tp = PacketConverter::convert(message);
     if(!message.valid) {
-      fprintf(stderr, "INVALID MESSAGE RECEIVED FROM ROBOT %i, TEAM %i\n", message.playerNum, message.teamNum);
+      fprintf(stderr, "INVALID MESSAGE RECEIVED FROM ROBOT %i, TEAM %i\n",
+              message.playerNum, message.teamNum);
       return;
     }
-
     tlog(40, "Packet converted."); 
     tlog(40, "Getting relay data.");
     uint32_t robotTime = tp.sentTime;
     int diff = this->getVirtualTime() - robotTime;
     tlog(40, "Relay vtime diff: %i", diff);
     this->updateVirtualTime(robotTime);
-    if(listener)
-    {}//this->robot_state_->team_ = tp.rbTeam;
-    else if (diff > 3 * PACKETS_PER_SECOND)
-      return;
-    tlog(40, "Is listener? %i", listener);
-
-    // Opponents data isn't relayed
-    //auto& oppMem = this->team_packets_->oppData[message.playerNum];
-    //oppMem = tp.oppData;
-    //this->team_packets_->oppUpdated[message.playerNum] = true;
 
     // Process relayable data
     this->tryUpdateRelayData(tp, message.playerNum);
@@ -189,283 +183,243 @@ void CommunicationModule::listenTeamUDP() {
 }
 
 void CommunicationModule::tryUpdateRelayData(const TeamPacket& packet, int playerNum) {
-  tlog(40, "Update relay data");
   if(playerNum == robot_state_->WO_SELF) return;
-  auto& previous = this->team_packets_->relayData[playerNum];
-  const auto& incoming = packet;
-  tlog(40, "Incoming time: %i, Prev time: %i\n", incoming.sentTime, previous.sentTime);
-  //if(incoming.sentTime > previous.sentTime || playerNum == packet.playerNum) {
-    previous = incoming;
-    this->team_packets_->frameReceived[playerNum] = this->frame_info_->frame_id;
-    tlog(40, "Updating relay data for robot %i at frame %i\n", playerNum, this->team_packets_->frameReceived[playerNum]);
-    if(this->getVirtualTime() - incoming.sentTime < LOC_INVALID_DELAY)
-      this->team_packets_->ballUpdated[playerNum] = this->frame_info_->frame_id;
+  this->team_packets_->relayData[playerNum] = packet;
+  this->team_packets_->frameReceived[playerNum] = this->frame_info_->frame_id;
+  tlog(40, "Updating relay data for robot %i at frame %i\n", playerNum,
+          this->team_packets_->frameReceived[playerNum]);
+  if(this->getVirtualTime() - packet.sentTime < LOC_INVALID_DELAY)
+    this->team_packets_->ballUpdated[playerNum] = this->frame_info_->frame_id;
 
-    this->world_objects_->objects_[playerNum].loc.x = incoming.locData.robotX;
-    this->world_objects_->objects_[playerNum].loc.y = incoming.locData.robotY;
-    this->world_objects_->objects_[playerNum].orientation = incoming.locData.orientation();
+  this->world_objects_->objects_[playerNum].loc.x = packet.locData.robotX;
+  this->world_objects_->objects_[playerNum].loc.y = packet.locData.robotY;
+  this->world_objects_->objects_[playerNum].orientation = packet.locData.orientation();
 
-    this->world_objects_->objects_[playerNum].sd.x = incoming.locData.robotSDX;
-    this->world_objects_->objects_[playerNum].sd.y = incoming.locData.robotSDY;
-    this->world_objects_->objects_[playerNum].sdOrientation = incoming.locData.sdOrient;
-  //}
+  this->world_objects_->objects_[playerNum].sd.x = packet.locData.robotSDX;
+  this->world_objects_->objects_[playerNum].sd.y = packet.locData.robotSDY;
+  this->world_objects_->objects_[playerNum].sdOrientation = packet.locData.sdOrient;
 }
 
 // send messages to teammates
 void CommunicationModule::sendTeamUDP() {
-  // Contruct the team packet, done before checking connect
-  // so we can use the filled in data in the simulator
-
   int WO_SELF = robot_state_->WO_SELF;
-
   if (WO_SELF < WO_TEAM_FIRST || WO_SELF > WO_TEAM_LAST) return;
 
+  // Contruct the team packet, done before checking connect
+  // so we can use the filled in data in the simulator
   TeamPacket tp;
 
-  //tp.playerNum = WO_SELF;
-  //tp.rbTeam  = robot_state_->team_;
-  //tp.gcTeam  = game_state_->gameContTeamNum;
   tp.robotIP = robot_state_->robot_id_;
-
-  int i = WO_SELF; {
-  //for(int i = WO_TEAM_FIRST; i <= WO_TEAM_LAST; i++) {
-    auto& relayData = tp;
-    relayData.sentTime = getVirtualTime();
-
-    // Relay packets from other team members
-    //if(i != WO_SELF) {
-      //relayData = team_packets_->relayData[i];
-      //continue;
-    //}
-    auto& locData = relayData.locData;
-    auto& bvrData = relayData.bvrData;
-    auto& commData = relayData;
+  tp.sentTime = getVirtualTime();
+  auto& locData = tp.locData;
+  auto& bvrData = tp.bvrData;
     
-    WorldObject& self = world_objects_->objects_[i];
-    locData.robotX = self.loc.x;
-    locData.robotY = self.loc.y;
-    locData.robotSDX = self.sd.x;
-    locData.robotSDY = self.sd.y;
-    locData.iorientation = self.orientation * LocStruct::OrientConversion;
+  WorldObject& self = world_objects_->objects_[WO_SELF];
+  locData.robotX = self.loc.x;
+  locData.robotY = self.loc.y;
+  locData.robotSDX = self.sd.x;
+  locData.robotSDY = self.sd.y;
+  locData.iorientation = self.orientation * LocStruct::OrientConversion;
 
-    // ball loc
-    WorldObject* ball = &(world_objects_->objects_[WO_BALL]);
-    WorldObject* goal = &(world_objects_->objects_[WO_OPP_GOAL]);
-    // Originally the ball position was pulled from localization mem. This bypasses
-    // any possible logic for altering the location based on whether the ball was
-    // recently seen. If ball->loc is good enough for behaviors it should be good
-    // enough for comm.
-    locData.balls[0] = ball->loc.x;
-    locData.balls[1] = ball->loc.y;
-    // Compute alternate balls
-    
-    // If out on the side line: placed on the center line 1 meter from the sideline on the appropriate side
-    if(ball->loc.y > HALF_FIELD_Y || ball->loc.y < -HALF_FIELD_Y) {
-      locData.balls[2] = ball->loc.x + 1'000;
-      locData.balls[3] = sign(ball->loc.y) * (HALF_FIELD_Y - 1'000);
-      locData.balls[4] = ball->loc.x - 1'000;
-      locData.balls[5] = sign(ball->loc.y) * (HALF_FIELD_Y - 1'000);
-    }
-    // If out on the goal line: placed on the center line 1 meter from the sideline on the appropriate side
-    else { // Default to assuming it's out on the goal line
-    //if(ball->loc.x > HALF_FIELD_X || ball->loc.x < -HALF_FIELD_X) {
-      locData.balls[2] = 0;
-      locData.balls[3] = sign(ball->loc.y) * (HALF_FIELD_Y - 1'000);
-      locData.balls[4] = 0;
-      locData.balls[5] = -sign(ball->loc.y) * (HALF_FIELD_Y - 1'000);
-    }
+  // ball loc
+  WorldObject* ball = &(world_objects_->objects_[WO_BALL]);
+  WorldObject* goal = &(world_objects_->objects_[WO_OPP_GOAL]);
+  // Originally the ball position was pulled from localization mem. This bypasses
+  // any possible logic for altering the location based on whether the ball was
+  // recently seen. If ball->loc is good enough for behaviors it should be good
+  // enough for comm.
+  locData.balls[0] = ball->loc.x;
+  locData.balls[1] = ball->loc.y;
+  // Compute alternate balls
+  // If out on the side line: placed on the center line 1 meter from the sideline on the appropriate side
+  if(ball->loc.y > HALF_FIELD_Y || ball->loc.y < -HALF_FIELD_Y) {
+    locData.balls[2] = ball->loc.x + 1'000;
+    locData.balls[3] = sign(ball->loc.y) * (HALF_FIELD_Y - 1'000);
+    locData.balls[4] = ball->loc.x - 1'000;
+    locData.balls[5] = sign(ball->loc.y) * (HALF_FIELD_Y - 1'000);
+  }
+  // If out on the goal line: placed on the center line 1 meter from the sideline on the appropriate side
+  else { // Default to assuming it's out on the goal line
+    locData.balls[2] = 0;
+    locData.balls[3] = sign(ball->loc.y) * (HALF_FIELD_Y - 1'000);
+    locData.balls[4] = 0;
+    locData.balls[5] = -sign(ball->loc.y) * (HALF_FIELD_Y - 1'000);
+  }
+  locData.ballCov = localization_->getBallCov(localization_->bestModel);
 
-    locData.ballCov = localization_->getBallCov(localization_->bestModel);
+  // send info about when we've heard from each teammate
+  // based on older commucation system; deprecated and should be changed
+  for (int j = WO_TEAM_FIRST; j <= WO_TEAM_LAST; j++){
+    tp.setPacketsMissed(j, frame_info_->frame_id - team_packets_->frameReceived[j]);
+  }
 
-    // send info about when we've heard from each teammate
-    for (int j = WO_TEAM_FIRST; j <= WO_TEAM_LAST; j++){
-      commData.setPacketsMissed(j, frame_info_->frame_id - team_packets_->frameReceived[j]);
-    }
+  // send info about our role and ball
+  // to help figure out roles
+  bvrData.role = robot_state_->role_;
+  bvrData.setBallSeen(ball->seen);
+  bvrData.ballMissed = (frame_info_->frame_id - ball->frameLastSeen);
+  bvrData.whistleScore = audio_processing_->whistle_score_;
+  bvrData.whistleSd = audio_processing_->whistle_sd_;
+  bvrData.whistleHeardFrame = audio_processing_->whistle_heard_frame_; 
 
-    // fill in opponents from opponent tracking
-    // first set them all to unfilled
-    /*
-    for (int i = 0; i < MAX_OPP_MODELS_IN_MEM; i++){
-      tp.oppData.opponents[i].filled = false;
-    }
-    int fillIndex = 0;
-    for (int j = 0; j < MAX_OPP_MODELS_IN_MEM; j++){
-      OpponentModel& model = opponents_->locModels[j];
-      if (model.alpha == -1000) continue;
+  // some constants that affect ball bid calcultion and comms behavior
+  // approximately how fast the robot walks
+  const float walkForwardSpeed = 280.0f; // mm/s
+  // approximately how fast the robot turns in place
+  const float turningSpeed = 50.0f; // degrees/s
+  // approximately how fast the robot turns around the ball
+  const float rotateAroundBallSpeed = turningSpeed/3; // degrees/second
+  // expected number of messages that are sent in a burst
+  const float burstFactor = 2.0;
+  // how much closer a supporter needs to be to become chaser
+  const float switchingCost = 200.0;
 
-      // dont send garbage info
-      if (fabs(model.X00) > 3000) continue;
-      if (fabs(model.X10) > 3000) continue;
-      if (model.SRXX == 0 || model.SRYY == 0) continue;
-      if (model.SRXX > 10000 || model.SRYY > 10000) continue;
-      if (std::isnan(model.X00) || std::isnan(model.X10)) continue;
-      if (std::isnan(model.SRXX) || std::isnan(model.SRYY)) continue;
-
-      // these are all in cm as well (how its used by the filter)
-      tp.oppData.opponents[fillIndex].x = model.X00;
-      tp.oppData.opponents[fillIndex].y = model.X10;
-      tp.oppData.opponents[fillIndex].sdx = model.SRXX;
-      tp.oppData.opponents[fillIndex].sdy = model.SRYY;
-      tp.oppData.opponents[fillIndex].sdxy = model.SRXY;
-      tp.oppData.opponents[fillIndex].framesMissed = (frame_info_->frame_id - model.frameLastObserved);
-      tp.oppData.opponents[fillIndex].filled = true;
-
-      fillIndex++;
-      if (fillIndex >= MAX_OPP_MODELS_IN_MEM) break;
-    }
-    */
-
-    // send info about our role and ball
-    // to help figure out roles
-    bvrData.role = robot_state_->role_;
-
-    // ball info
-    //bvrData.ballDistance = ball->distance;
-    bvrData.setBallSeen(ball->seen);
-    bvrData.ballMissed = (frame_info_->frame_id - ball->frameLastSeen);
-    bvrData.whistleScore = audio_processing_->whistle_score_;
-    bvrData.whistleSd = audio_processing_->whistle_sd_;
-
-    // ball bid
-    // not just how close, but are we facing it... and are we facing roughly the right direction?
-    // turn ~50 deg / sec, walk 192 mm / sec.
-    // so every 50 degrees off is anohter 192 mm we could have walked
-    // but we only need to turn maybe halfway?
-    // so i'll say every 50 degrees is worth 100mm
-    bvrData.ballBid = ball->distance;
-
-    float bearingError = fabs(ball->bearing)*RAD_T_DEG - 30.0;
-    if (bearingError < 0) bearingError = 0;
-    bvrData.ballBid += bearingError * 3.0;
-
-    // For each 45 difference between our orientation and the goal's position,
-    // we increase ball bid by 1,000. So a robot walking toward the ball and away
-    // from the opponents' goal has to be 2 meters closer than a robot approaching
-    // the ball and facing the opponents' goal.
-    tlog(40, "Adjusting ball bid based on required orientation; initial bid: %2.2f", bvrData.ballBid);
-    float initialRotation = ball->bearing;
-    tlog(40, "Initial rotation (bearing to the ball): %2.2f", initialRotation * RAD_T_DEG);
-    float finalRotation = behavior_->largeGapHeading;
-    tlog(40, "Final rotation (bearing to the shot target from the ball's position): %2.2f", finalRotation * RAD_T_DEG);
-    // Heading error is proportional to the total rotation time required. The initial rotation is about
-    // the robot's origin - rotating in place - so it's about 3x faster. The final rotation is about the
-    // ball, meaning the robot needs to strafe and rotate around a small arc.
-    float headingError = fabs(initialRotation) / 3 + fabs(finalRotation);
-    headingError *= RAD_T_DEG;
-    tlog(40, "Final heading error with initial and final rotation normalized: %2.2f degrees", headingError);
-    
-    float walkForwardSpeed = 280.0f; // 280 mm/s
-    float rotationSpeed = 180.0f / 12; // 180 degrees per 12 sec
-    float rotationIncrease = headingError * walkForwardSpeed / rotationSpeed;
-    tlog(40, "Ball bid rotation error increase: %2.4f * %2.2f / %2.2f = %2.4f", headingError, walkForwardSpeed, rotationSpeed, rotationIncrease);
-    
-    bvrData.ballBid += rotationIncrease;
-    tlog(40, "Increased ball bid to %2.2f", bvrData.ballBid);
-
-    // and we don't want to be downfield of the ball
-    // ramp this error up to a max worth of 800 mm (close to the time required to rotate 180)
-    float xError = self.loc.x - ball->loc.x;
-    if (xError < 0) xError = 0;
-    if (xError > 800) xError = 800;
-    bvrData.ballBid += xError;
-
-    // sonar
-    float timeSinceSonar = (frame_info_->seconds_since_start - behavior_->sonarObstacleTime);
-    if (timeSinceSonar < 0.25){
-      // half meter penalty for sonar avoiding robots
-      bvrData.ballBid += 500;
-    }
-
-    // If self is chaser and keeps kicking the ball out, penalize bid so another robot will maybe become chaser.
-    float timeSinceOutOnUs = frame_info_->seconds_since_start - behavior_->outOnUsTime;
-    if (timeSinceOutOnUs < 5) {
-      // set the bid high enough for a non-keeper to take over
-      bvrData.ballBid = 5000;
-    }
-
-    // penalty for keeper
-    if (robot_state_->WO_SELF == KEEPER){
-      // penalty for keeper?  or maybe an advantage to him?
+  // Ball Bid
+  // how close are we to the ball?
+  bvrData.ballBid = ball->distance;
+  // not just how close, but are we facing it?
+  float initialRotation = fabs(ball->bearing)*RAD_T_DEG;
+  // and how much do we have to turn after reaching the ball?
+  float finalRotation = fabs(behavior_->largeGapHeading - ball->bearing)*RAD_T_DEG;
+  if (finalRotation > 180.0) finalRotation = 360.0 - finalRotation;
+  bvrData.ballBid += initialRotation / turningSpeed * walkForwardSpeed;
+  bvrData.ballBid += finalRotation / rotateAroundBallSpeed * walkForwardSpeed;
+  // and are we currently obstructed? (sonar)
+  float timeSinceSonar = (frame_info_->seconds_since_start - behavior_->sonarObstacleTime);
+  // half meter penalty for sonar avoiding robots
+  if (timeSinceSonar < 0.25) bvrData.ballBid += 500;
+  // and are we the keeper?
+  if (robot_state_->WO_SELF == KEEPER){
       // keeper must be 33% closer than other robots to win out and go for it
       bvrData.ballBid *= 1.5;
-
-      // not if diving
-      if (behavior_->keeperDiving != Dive::NONE){
-        bvrData.ballBid = 7000;
-      }
-
+      // currently diving?
+      if (behavior_->keeperDiving != Dive::NONE) bvrData.ballBid += 12000;
       // not if ball is coming at us
-      if (ball->relVel.x < -30){
-        if (ball->relVel.x < -50){
-          bvrData.ballBid += 6500;
-        } else {
+      if (ball->relVel.x < -50) bvrData.ballBid += 6500;
+      else if (ball->relVel.x < -30)
           bvrData.ballBid += 25.0 * -ball->relVel.x;
-        }
-      }
-
-      // not too far up field
+      // and don't for the ball unless it's close to the goal area
       if (robot_state_->role_ == KEEPER){
         // only in last 2 meters of field and not too far to sideline
-        if (ball->loc.x > -2250 || (fabs(ball->loc.y) > 1500)) {
-          bvrData.ballBid = 7000;
-        }
-      }
-      // if we're already chasing, chase up to midfield
-      else {
-        if (ball->loc.x > 0) {
-          bvrData.ballBid = 7000;
-        }
-      }
-    }
-
-    // we dont know which way we're going
-    if (localization_->oppositeModels || localization_->fallenModels){
-      bvrData.ballBid += 6000;
-    }
-
-    // state
-    bvrData.state = game_state_->state();
-
-    // active getup or there is a fall direction means we've fallen
-    bvrData.setFallen(odometry_->getting_up_side_ != Getup::NONE || odometry_->fall_direction_ != Fall::NONE);
-
-    // strategy
-    //bvrData.keeperClearing = behavior_->keeperClearing;
-    //bvrData.targetX = behavior_->absTargetPt.x;
-    //bvrData.targetY = behavior_->absTargetPt.y;
-    //bvrData.useTarget = behavior_->useAbsTarget;
-
-    //bvrData.passInfo = behavior_->passInfo;
-    //bvrData.setPlayInfo = behavior_->setPlayInfo;
-    bvrData.setPlayType = behavior_->setPlayInfo.type;
-    bvrData.setReversed(behavior_->setPlayInfo.reversed);
-    bvrData.setPlayTargetPlayer = behavior_->setPlayInfo.targetPlayer;
-
-    // bad model ... ignore ball
-    if (localization_->bestAlpha < 0.8 || localization_->oppositeModels)
-      bvrData.ballMissed = 60;
+        if (ball->loc.x > -(HALF_FIELD_X - OUTER_PENALTY_X) || (fabs(ball->loc.y) > GOAL_Y))
+          bvrData.ballBid += 7000;
+      // but if we're already chasing, chase up to midfield
+      } else if (ball->loc.x > 0)
+          bvrData.ballBid += 12000;
   }
+  // and make sure we're not lost
+  if (localization_->oppositeModels || localization_->fallenModels)
+    bvrData.ballBid += 6000;
 
-  if (teamTimer_.elapsed_s() > SECONDS_PER_PACKET) {
-    incrementVirtualTime();
-    SPLStandardMessage packet = convert(tp);
-    packet.teamNum = game_state_->gameContTeamNum;
-    packet.playerNum = WO_SELF;
-    if(connected_ && frame_info_->source == MEMORY_ROBOT) {
-        bool res = teamUDP->send(packet, packet.send_size());
-      if (res){
-        team_packets_->frameReceived[WO_SELF] = frame_info_->frame_id;
-      }
-      else
-        std::cerr << "Sending team UDP failed" << std::endl;
-    }
-    teamTimer_.restart();
-  }
+  // state
+  bvrData.state = game_state_->state();
+
+  // active getup or there is a fall direction means we've fallen
+  bvrData.setFallen(odometry_->getting_up_side_ != Getup::NONE ||
+                    odometry_->fall_direction_ != Fall::NONE);
+
+  // set play stuff (possibly unused ??)
+  bvrData.setPlayType = behavior_->setPlayInfo.type;
+  bvrData.setReversed(behavior_->setPlayInfo.reversed);
+  bvrData.setPlayTargetPlayer = behavior_->setPlayInfo.targetPlayer;
+
+  // bad model ... ignore ball
+  if (localization_->bestAlpha < 0.8 || localization_->oppositeModels)
+    bvrData.ballMissed = 255;
+
+  // how many frames to wait between messages
+  int secsRemaining = game_state_->secsRemaining;
+  if (game_state_->isFirstHalf == 1)
+      secsRemaining += 600;
+  int budget = std::max(1, game_state_->messageBudget);
+  tp.bvrData.waitFrames = (int)std::ceil(secsRemaining*burstFactor*30/budget);
+
+  //update data for self
   team_packets_->relayData[WO_SELF] = tp;
-  //team_packets_->oppData[WO_SELF] = tp.oppData;
-  team_packets_->frameReceived[WO_SELF] = frame_info_->frame_id;
   team_packets_->ballUpdated[WO_SELF] = frame_info_->frame_id;
-  //team_packets_->oppUpdated[WO_SELF] = true;
+
+
+  // Determine whether sending a packet is necessary
+  // do we have messages left in the budget?
+  if (game_state_->messageBudget < 5) return; // Leaving a little buffer
+  // do we need to tell the team about a whistle?
+  // Default to not sending the message
+  bool whistleDetected = false;
+  // Unless whistle score is greater than 0.5
+  if((audio_processing_->whistle_score_ >= 0.5) &&
+     (audio_processing_->whistle_heard_frame_ > frame_info_->frame_id - 30)){
+     whistleDetected = true; 
+     bvrData.msgType = 2;
+  }
+  // have we heard from a teammate recently?
+  int mrf = WO_TEAM_FIRST; // robot that send most recently (could be us)
+  for (int i = WO_TEAM_FIRST+1; i <= WO_TEAM_LAST; i++){
+      if (team_packets_->frameReceived[i] > team_packets_->frameReceived[mrf])
+          mrf = i;
+  }
+  auto lastMsg = team_packets_->relayData[mrf];
+  auto lastMsgTime = team_packets_->frameReceived[mrf];
+  // If whistle was detected we prioritize sending the message
+  if (!whistleDetected) {
+    if (((lastMsgTime + lastMsg.bvrData.waitFrames) > frame_info_->frame_id)
+        && (mrf != WO_SELF)) {
+      // We HAVE heard from a teammate recently, so we should NOT send a message
+      bool shouldSend = false;
+      // UNLESS one of the following:
+      // 1) We think they're flipped
+      Point2D ourBall = Point2D(ball->loc.x, ball->loc.y);
+      Point2D theirBall = lastMsg.locData.ballPos();
+      if ((ourBall.getDistanceTo(theirBall) > 2000) &&
+          (ourBall.getDistanceTo(-theirBall) < 1000)) {
+        shouldSend = true;
+        bvrData.msgType = 3;
+      }
+      // 2) We have a better bid
+      float theirBid = team_packets_->relayData[mrf].bvrData.ballBid;
+      // (assume they are chasing the ball, so adjust for time)
+      theirBid -= walkForwardSpeed * (frame_info_->frame_id - lastMsgTime)/30.0;
+      if (bvrData.ballBid + switchingCost < theirBid) {
+        shouldSend = true;
+        bvrData.msgType = 1;
+      }
+      if (!shouldSend) return;
+    } else {
+      // We have NOT heard from another robot recently, so someone should send
+      // Let's give the precedence to the robot that sent the last message
+      int sendOffset = (WO_SELF-mrf) % NUM_PLAYERS;
+      if (frame_info_->frame_id < (lastMsgTime + lastMsg.bvrData.waitFrames +
+          sendOffset)) return;
+      // No point in sending if we don't see the ball
+      if (!ball->seen) return;
+      // We've seen the ball, and no one else has, so let's chase
+      bvrData.msgType = 1;
+    }
+    
+    // We should be in Playing state and Normal phase
+    if (game_state_->state() != PLAYING) return;
+    if (game_state_->gamePhase != PHASE_NORMAL) return;
+  } else {
+    // On whistle, 5 is the chaser.
+    if (WO_SELF == WO_TEAM5)
+        bvrData.msgType = 1;
+  }
+  // Make sure we haven't sent a packet too recently!
+  if (teamTimer_.elapsed_s() < tp.bvrData.waitFrames/30.0) return;
+
+  // send packet
+  incrementVirtualTime();
+  SPLStandardMessage packet = PacketConverter::convert(tp);
+  packet.teamNum = game_state_->gameContTeamNum;
+  packet.playerNum = WO_SELF;
+  if(connected_ && frame_info_->source == MEMORY_ROBOT) {
+      bool res = teamUDP->send(packet, packet.send_size());
+    if (res){
+      team_packets_->frameReceived[WO_SELF] = frame_info_->frame_id;
+    }
+    else
+      std::cerr << "Sending team UDP failed" << std::endl;
+  }
+  teamTimer_.restart();
 }
 
 void CommunicationModule::sendToolResponse(ToolPacket message) {
@@ -655,141 +609,122 @@ void CommunicationModule::handleLoggingBlocksMessage(const ToolPacket& packet) {
 }
 
 void CommunicationModule::listenGameControllerUDP() {
-  RoboCupGameControlData gc;
-  bool res = this->gcDataUDP->recv(gc);
+  RoboCupGameControlData gcData;
+  bool res = this->gcDataUDP->recv(gcData);
   if(!res) return;
   if(this->robot_state_->ignore_comms_) return;
 
-  //std::cout << "getting messages" << std::endl;
-  //printf("Team numbers: %d %d %d",gc.teams[0].teamNumber,gc.teams[1].teamNumber, this->game_state_->gameContTeamNum);
-  //std::cout << std::endl;
-
-  // check version of packet
-  if (gc.version != GAMECONTROLLER_STRUCT_VERSION){
-    cout << endl << "ERROR: expect GameControllerPacket version: "
-         << GAMECONTROLLER_STRUCT_VERSION
-         << ", received: " << gc.version << endl << endl;
+  // ch/ck version of packet
+  if (gcData.version != GAMECONTROLLER_STRUCT_VERSION) {
+    std::cout << "ERROR: expect GameControllerPacket version: " <<
+        GAMECONTROLLER_STRUCT_VERSION << ", received: " <<gcData.version <<
+        std::endl;
+    return;
   }
 
+  // Determine which TeamInfo is ours
   int teamNumber = this->game_state_->gameContTeamNum;
-
-  // First check if this packet is even meant for a robot on our team !
-  if (gc.teams[0].teamNumber==teamNumber || gc.teams[1].teamNumber==teamNumber) {
-    int teamIndex=0; // stores the index into the team array
-    int oppIndex=1; // stores the index into the team array
-    if (teamNumber==gc.teams[1].teamNumber) {
-      teamIndex=1;
-      oppIndex=0;
-    }
-
-    int WO_SELF = this->robot_state_->WO_SELF;
-    TeamInfo t=gc.teams[teamIndex];
-    //for (int p=0; p<6; p++) {
-    //  RobotInfo r_=t.players[p]; // We index from 1-5, they go 0-4
-    //  printf("Penalty: %d",r_.penalty);
-    //  std::cout << std::endl;     
-    //}
-    //std::cout << "Team other" << std::endl;
-    //TeamInfo t_=gc.teams[oppIndex];
-    //for (int p=0; p<6; p++) {
-    //  RobotInfo r_=t_.players[p]; // We index from 1-5, they go 0-4
-    //  printf("Penalty: %d",r_.penalty);
-    //  std::cout << std::endl;     
-    //}
-
-    // check if our team has changed
-    //  if (t.teamColour != commonMem->team){
-    // reset world objects for opposite field
-    //  commonMem->teamChange = true;
-    //}
-
-    // process team color info
-    if (this->robot_state_->team_ != t.teamColour) {
-      std::cout << "Gamecontroller has a team change" << std::endl;
-      this->robot_state_->team_changed_ = true;
-    }
-
-    this->robot_state_->team_ = t.teamColour;
-    this->game_state_->isFirstHalf=gc.firstHalf; // 1 = game in first half, 0 otherwise
-
-    int oldState = this->game_state_->state();
-
-    // process state info (robot's current game state; e.g. Playing, Ready, etc.)
-    {
-      RobotInfo r=t.players[WO_SELF-1]; // We index from 1-5, they go 0-4
-      // if robot is not penalized, set its state based on GC message
-      if (r.penalty == PENALTY_NONE) { 
-        switch(gc.state) {
-          case STATE_INITIAL: this->game_state_->setState(INITIAL); break;
-          case STATE_READY: this->game_state_->setState(READY); break;
-          case STATE_SET: this->game_state_->setState(SET); break;
-          // they want us to think of the free kicks as substates inside of playing
-          case STATE_PLAYING: this->game_state_->setState(PLAYING); break;
-          case STATE_FINISHED: this->game_state_->setState(FINISHED); break;
-        }
-        if(oldState != this->game_state_->state() && this->game_state_->state() == PLAYING && oldState != PENALISED)
-          this->behavior_->timePlayingStarted = this->frame_info_->seconds_since_start - 20;
-
-        // only continue for players (coach will cause index-out-of-bound errors
-        // and we don't have anything else to update for coach anyway)
-        if(WO_SELF > WO_TEAM_LAST || WO_SELF < WO_TEAM_FIRST) return;
-
-      } else { // else this robot is penalized.
-        this->game_state_->setState(PENALISED);
-        this->game_state_->secsTillUnpenalised=r.secsTillUnpenalised;
-      }
-    } 
-
-    // check if state changed
-    if (oldState != this->game_state_->state()) {
-      this->game_state_->lastStateChangeFromButton = false;
-      if (oldState == PENALISED)
-        this->game_state_->lastTimeLeftPenalized = (this->frame_info_->seconds_since_start);
-      //  this->game_state->stateChange = true;
-    }
-
-    // check if penalty kick
-    if (gc.gamePhase == GAME_PHASE_PENALTYSHOOT)
-      this->game_state_->isPenaltyKick = true;
-    else
-      this->game_state_->isPenaltyKick = false;
-
-    // free kick stuff
-    this->game_state_->isFreeKick = (gc.setPlay == SET_PLAY_GOAL_FREE_KICK) ||
-        (gc.setPlay == SET_PLAY_PUSHING_FREE_KICK) ||
-        (gc.setPlay == SET_PLAY_CORNER_KICK) ||
-        (gc.setPlay == SET_PLAY_KICK_IN);
-    this->game_state_->isFreeKickTypeGoal = (gc.setPlay == SET_PLAY_GOAL_FREE_KICK) ||
-        (gc.setPlay == SET_PLAY_CORNER_KICK) ||
-        (gc.setPlay == SET_PLAY_KICK_IN);
-
-    // random stuff
-    this->game_state_->isFirstHalf=gc.firstHalf; // 1 = game in first half, 0 otherwise
-    if (gc.kickingTeam==this->game_state_->gameContTeamNum) this->game_state_->ourKickOff=true;
-    else this->game_state_->ourKickOff=false;
-
-    // estimate of number of seconds remaining in the half:
-    this->game_state_->secsRemaining=gc.secsRemaining;
-
-    // check if somebody scored
-    if (this->game_state_->ourScore<t.score)
-      cout << "WE SCORED !!" << endl << flush;
-    this->game_state_->ourScore=t.score;
-
-    if (this->game_state_->opponentScore<gc.teams[oppIndex].score)
-      cout << "CRAP THEY SCORED ???" << endl << flush;
-    this->game_state_->opponentScore=gc.teams[oppIndex].score;
-
-    this->game_state_->frameReceived = this->frame_info_->frame_id;
-
-    if(gcTimer_.elapsed_s() > SECONDS_PER_PACKET) {
-      this->sendGameControllerUDP();
-      gcTimer_.restart();
-    }
- 
+  int teamIndex=0;
+  int oppIndex=1;
+  if (gcData.teams[1].teamNumber==teamNumber) {
+    teamIndex=1;
+    oppIndex=0;
+  } else if (gcData.teams[0].teamNumber != teamNumber) {
+    std::cout << "ERROR: Our team (Team " << teamNumber <<
+        ") isn't playing in this game (Team " << gcData.teams[0].teamNumber <<
+        " vs Team " << gcData.teams[1].teamNumber << ")" << std::endl;
+    return;
   }
-  return;
+  TeamInfo tInfo=gcData.teams[teamIndex];
+  TeamInfo oppInfo=gcData.teams[oppIndex];
 
+  int WO_SELF = this->robot_state_->WO_SELF;
+
+  // process team color info
+  if (this->robot_state_->team_ != tInfo.teamColour) {
+    std::cout << "Gamecontroller has a team change" << std::endl;
+    this->robot_state_->team_changed_ = true;
+  }
+
+  this->game_state_->messageBudget = tInfo.messageBudget;
+
+  this->robot_state_->team_ = tInfo.teamColour;
+  this->game_state_->isFirstHalf=gcData.firstHalf; // 1 = game in first half, 0 otherwise
+
+  int oldState = this->game_state_->state();
+
+  // process state info (robot's current game state; e.g. Playing, Ready, etc.)
+  
+  RobotInfo rInfo=tInfo.players[WO_SELF-1]; // We index from 1-5, they go 0-4
+  // if robot is not penalized, set its state based on GC message
+  if (rInfo.penalty == PENALTY_NONE) { 
+    switch(gcData.state) {
+      case STATE_INITIAL: this->game_state_->setState(INITIAL); break;
+      case STATE_READY: this->game_state_->setState(READY); break;
+      case STATE_SET: this->game_state_->setState(SET); break;
+      case STATE_PLAYING: this->game_state_->setState(PLAYING); break;
+      case STATE_FINISHED: this->game_state_->setState(FINISHED); break;
+    }
+    if(oldState != this->game_state_->state() &&
+        this->game_state_->state() == PLAYING &&
+        oldState != PENALISED)
+      this->behavior_->timePlayingStarted = this->frame_info_->seconds_since_start - 20;
+  } else { // else this robot is penalized.
+    this->game_state_->setState(PENALISED);
+    this->game_state_->spawnFromPenalty = (rInfo.penalty != PENALTY_SPL_ILLEGAL_MOTION_IN_SET);
+    this->game_state_->secsTillUnpenalised=rInfo.secsTillUnpenalised;
+  }
+  
+
+  // check if state changed
+  if (oldState != this->game_state_->state()) {
+    this->game_state_->lastStateChangeFromButton = false;
+    if (oldState == PENALISED)
+      this->game_state_->lastTimeLeftPenalized = (this->frame_info_->seconds_since_start);
+  }
+
+  switch(gcData.gamePhase) {
+    case GAME_PHASE_NORMAL: this->game_state_->gamePhase = PHASE_NORMAL; break;
+    case GAME_PHASE_PENALTYSHOOT: this->game_state_->gamePhase = PHASE_PENALTYSHOOT; break;
+    case GAME_PHASE_OVERTIME: this->game_state_->gamePhase = PHASE_OVERTIME; break;
+    case GAME_PHASE_TIMEOUT: this->game_state_->gamePhase = PHASE_TIMEOUT; break;
+  }
+  this->game_state_->isPenaltyKick = (this->game_state_->gamePhase==PHASE_PENALTYSHOOT);
+
+  // free kick stuff
+  this->game_state_->isFreeKick = (gcData.setPlay == SET_PLAY_GOAL_KICK) ||
+      (gcData.setPlay == SET_PLAY_PUSHING_FREE_KICK) ||
+      (gcData.setPlay == SET_PLAY_CORNER_KICK) ||
+      (gcData.setPlay == SET_PLAY_KICK_IN);
+  this->game_state_->isFreeKickTypeGoal = (gcData.setPlay == SET_PLAY_GOAL_KICK) ||
+      (gcData.setPlay == SET_PLAY_CORNER_KICK) ||
+      (gcData.setPlay == SET_PLAY_KICK_IN);
+  this->game_state_->isFreeKickTypePenalty = (gcData.setPlay == SET_PLAY_PENALTY_KICK);
+
+  // random stuff
+  this->game_state_->isFirstHalf=gcData.firstHalf; // 1 = game in first half, 0 otherwise
+  if (gcData.kickingTeam==this->game_state_->gameContTeamNum)
+    this->game_state_->ourKickOff=true;
+  else this->game_state_->ourKickOff=false;
+
+  // number of seconds remaining in the half:
+  this->game_state_->secsRemaining=gcData.secsRemaining;
+
+  // check if somebody scored
+  if (this->game_state_->ourScore<tInfo.score)
+    std::cout << "WE SCORED !!" << std::endl;
+  this->game_state_->ourScore=tInfo.score;
+
+  if (this->game_state_->opponentScore < oppInfo.score)
+    std::cout << "CRAP THEY SCORED ???" << std::endl;
+  this->game_state_->opponentScore = oppInfo.score;
+
+  this->game_state_->frameReceived = this->frame_info_->frame_id;
+
+  if(gcTimer_.elapsed_s() > SECONDS_PER_PACKET) {
+    this->sendGameControllerUDP();
+    gcTimer_.restart();
+  }
 }
 
 bool CommunicationModule::streaming() { return tcpserver_ != nullptr && tcpserver_->established(); }

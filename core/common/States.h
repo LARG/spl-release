@@ -24,7 +24,9 @@ ENUM(State,
   BOTTOM_CAM = 9,
   TOP_CAM = 10,
   TEST_ODOMETRY = 11,
-  MANUAL_CONTROL = 12
+  MANUAL_CONTROL = 12,
+  UNSTIFF = 13,
+  CALIBRATION = 14
 );
 
 const std::string stateNames[] = {
@@ -40,9 +42,18 @@ const std::string stateNames[] = {
   "bottom_cam",
   "top_cam",
   "test_odometry",
-  "manual_control"
+  "manual_control",
+  "unstiff",
+  "calibration"
 };
 
 ENUM_STREAMS(State);
+
+ENUM(Phase,
+  PHASE_NORMAL = 0,
+  PHASE_PENALTYSHOOT = 1,
+  PHASE_OVERTIME = 2,
+  PHASE_TIMEOUT = 3
+);
 
 #endif

@@ -1,0 +1,9 @@
+name: "bottom"
+model_path: "/home/nao/data/models/microx_128_no_resize.tflite"
+input_width: 320
+input_height: 240
+num_output_boxes: 96
+confidence_threshold: 0.3
+threads: 4
+subsample_major: 3
+subsample_minor: 2

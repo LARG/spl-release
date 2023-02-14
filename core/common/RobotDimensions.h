@@ -95,7 +95,7 @@ public:
   }
 
   void setNaoH21() {
-    // Nao v4 with no motorized hands
+    // Nao v6 with no motorized hands
     memset(isAngle_, false, NUM_DIMENSIONS);
     isAngle_[torsoHipRoll] = true;
     values_[hipOffsetY] = 50;
@@ -112,7 +112,7 @@ public:
     values_[zLegJoint1ToHeadPan] = 85.0 + 126.5; // not used
 	values_[armOffset1] = 0;
     values_[armOffset2] = 98;
-    values_[armOffset3] = 126.5;
+    values_[armOffset3] = 100;
     values_[upperArmLength] = 105;
     values_[lowerArmLength] = 57.75 + 55.95;
     values_[elbowOffsetY] = 15.0;

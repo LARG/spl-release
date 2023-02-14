@@ -4,7 +4,8 @@ import sys, subprocess, os
 
 baseIP = '192.168.1.%s'
 validInterfaces = ['nao', 'motion', 'python', 'memory_test', 'lola', 'vision',
-                   'scripts', 'color_table', 'configs', 'time']
+                   'scripts', 'color_table', 'configs', 'time', 'detect_lib',
+                   'models']
 
 # All interfaces is the most common type of copy. Updates most code on the robot
 # but does not change color tables, start up and stop scripts, and time.
@@ -12,6 +13,7 @@ allInterfaces = validInterfaces[:]
 allInterfaces.remove('scripts')
 allInterfaces.remove('color_table')
 allInterfaces.remove('time')
+allInterfaces.remove('memory_test')
 installInterfaces = validInterfaces[:]
 
 NAO_HOME = os.getenv('NAO_HOME')
@@ -222,6 +224,13 @@ def main(ip,interfaces,options,robotID):
       cmd = '../install/setup_robot --date --ip %s' % ip
       p = subprocess.Popen(cmd,shell=True)
       p.wait()
+    
+    elif interface == 'detect_lib':
+      doFileOperations(ip, '../lib/detect_lib/libdetect_lib.so', 'lib/i386-linux-gnu/', options)
+    
+    elif interface == 'models':
+      doFileOperations(ip, '../lib/detect_lib/testing/models/*.tflite', 'data/models/', options)
+      doFileOperations(ip, '../lib/detect_lib/testing/models/*.yaml', 'data/models/', options)
 
     else:
       print >>sys.stderr,'Invalid interface: %s' % interface

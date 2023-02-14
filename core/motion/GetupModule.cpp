@@ -62,9 +62,11 @@ bool GetupModule::processFrameChild() {
     getUpSide = Getup::UNKNOWN;
   }
 
-  bool fallenCountHigh = (abs(walk_request_->roll_fallen_counter_) >= 50) || (abs(walk_request_->tilt_fallen_counter_) >= 50);
+  bool fallenCountHigh = (abs(walk_request_->roll_fallen_counter_) >= 50) ||
+                         (abs(walk_request_->tilt_fallen_counter_) >= 50);
 
   switch (state) {
+
     case INITIAL:
       if (walk_request_->getup_from_keeper_dive_) {
         transitionToState(CROSS); // goalie needs cross
@@ -75,8 +77,10 @@ bool GetupModule::processFrameChild() {
           transitionToState(PREPARE_ARMS);
       }
       break;
+
     case PREPARE_ARMS:
-      if ((getTimeInState() > PREPARE_ARMS_TIME) || fallenCountHigh) { // if fallen count is high, it's too late to prepare arms
+      if ((getTimeInState() > PREPARE_ARMS_TIME) || fallenCountHigh) {
+        // if fallen count is high, it's too late to prepare arms
         transitionToState(STIFFNESS_OFF);
       } else {
         if (getTimeInState() < 0.015) {
@@ -85,13 +89,16 @@ bool GetupModule::processFrameChild() {
         // otherwise do nothing
       }
       break;
+
     case STIFFNESS_OFF:
-      if ((getTimeInState() > STIFFNESS_OFF_TIME) || fallenCountHigh) { // if fallen count is high, it's too late to worry about the stiffness being off
+      if ((getTimeInState() > STIFFNESS_OFF_TIME) || fallenCountHigh) {
+        // if fallen count is high, it's too late to worry about the stiffness being off
         transitionToState(STIFFNESS_ON);
       } else {
         commands_->setAllStiffness(0.0,10);
       }
       break;
+
     case STIFFNESS_ON:
       if (getTimeInState() > 0.001) {
         //if (armsStuckBehindBack()) {
@@ -104,6 +111,7 @@ bool GetupModule::processFrameChild() {
         commands_->setAllStiffness(1.0,10);
       }
       break;
+
     case CROSS:
       if (getTimeInState() < CROSS_TIME)
         cross();
@@ -112,6 +120,7 @@ bool GetupModule::processFrameChild() {
         numCrosses++;
       }
       break;
+
     case EXECUTE:
       if (currMotion == Getup) {
         selectGetup();
@@ -122,7 +131,8 @@ bool GetupModule::processFrameChild() {
         stateStartTime = frame_info_->seconds_since_start; // reset the time
       }
       if (isMotionDoneExecuting()) {
-        if ((abs(walk_request_->tilt_fallen_counter_) > 2) || (abs(walk_request_->roll_fallen_counter_) > 2)) {
+        if ((abs(walk_request_->tilt_fallen_counter_) > 2) ||
+            (abs(walk_request_->roll_fallen_counter_) > 2)) {
           // still fallen
           selectGetup();
           transitionToState(STIFFNESS_ON);
@@ -140,6 +150,7 @@ bool GetupModule::processFrameChild() {
         executeMotionSequence();
       }
       break;
+
     case STAND:
       // do nothing, handled in MotionCore
       if (getTimeInState() > 0.5)
@@ -156,6 +167,7 @@ bool GetupModule::processFrameChild() {
         executeMotionSequence();
       }
       break;
+
     case PAUSE_BEFORE_RESTART:
       if (getTimeInState() > PAUSE_BEFORE_RESTART_TIME) {
         transitionToState(STIFFNESS_ON);
@@ -163,6 +175,7 @@ bool GetupModule::processFrameChild() {
         commands_->setAllStiffness(0.0,10);
       }
       break;
+
     default:
       return false;
       break;
@@ -188,33 +201,20 @@ void GetupModule::selectGetup() {
   }
 }
 
-void GetupModule::setJointFromOffset(float angles[], Joint joint, float offset) {
-  //angles[joint] = joint_angles_->values_[joint] + offset;
-  angles[joint] = offset;
-}
-
 void GetupModule::prepareArms() {
   float angles[NUM_JOINTS];
   for (int i = 0; i < NUM_JOINTS; i++) {
     angles[i] = joint_angles_->values_[i];
   }
-  setJointFromOffset(angles,HeadPitch,DEG_T_RAD * -15);
-  //setJointFromOffset(angles,LShoulderPitch,DEG_T_RAD * -46);
-  //setJointFromOffset(angles,LShoulderRoll,DEG_T_RAD * 32);
-  //setJointFromOffset(angles,LElbowYaw,DEG_T_RAD * 80);
-  //setJointFromOffset(angles,LElbowRoll,DEG_T_RAD * -50);
-  //setJointFromOffset(angles,RShoulderPitch,DEG_T_RAD * -46);
-  //setJointFromOffset(angles,RShoulderRoll,DEG_T_RAD * 32);
-  //setJointFromOffset(angles,RElbowYaw,DEG_T_RAD * 80);
-  //setJointFromOffset(angles,RElbowRoll,DEG_T_RAD * -50);
-  setJointFromOffset(angles,LShoulderPitch,DEG_T_RAD * -116);
-  setJointFromOffset(angles,LShoulderRoll,DEG_T_RAD * 12);
-  setJointFromOffset(angles,LElbowYaw,DEG_T_RAD * -85);
-  setJointFromOffset(angles,LElbowRoll,DEG_T_RAD * 0);
-  setJointFromOffset(angles,RShoulderPitch,DEG_T_RAD * -116);
-  setJointFromOffset(angles,RShoulderRoll,DEG_T_RAD * 12);
-  setJointFromOffset(angles,RElbowYaw,DEG_T_RAD * -85);
-  setJointFromOffset(angles,RElbowRoll,DEG_T_RAD * 0);
+  angles[HeadPitch] = DEG_T_RAD * -15;
+  angles[LShoulderPitch] = DEG_T_RAD * -116;
+  angles[LShoulderRoll] = DEG_T_RAD * 12;
+  angles[LElbowYaw] = DEG_T_RAD * -85;
+  angles[LElbowRoll] = DEG_T_RAD * 0;
+  angles[RShoulderPitch] = DEG_T_RAD * -116;
+  angles[RShoulderRoll] = DEG_T_RAD * 12;
+  angles[RElbowYaw] = DEG_T_RAD * -85;
+  angles[RElbowRoll] = DEG_T_RAD * 0;
   
   processJointCommands(0,angles);
   commands_->setAllStiffness(0.0,0);

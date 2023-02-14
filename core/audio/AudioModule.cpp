@@ -65,8 +65,14 @@ void AudioModule::processCommunications() {
   for(int i = WO_TEAM_FIRST; i <= WO_TEAM_LAST; i++) {
     if(i == cache_.robot_state->WO_SELF) continue;
     const auto& relay = cache_.team_packets->relayData[i];
+    uint32_t heard_frame = static_cast<uint32_t>(relay.bvrData.whistleHeardFrame);
     float score = static_cast<float>(relay.bvrData.whistleScore);
     float sd = static_cast<float>(relay.bvrData.whistleSd);
+    // If the whistle score is too stale then just use default values
+    if (heard_frame - cache_.frame_info->frame_id > 20) {
+        score = 0.;
+        sd = 1.;
+    }
     score = WhistleUKF::sanitizeState(score);
     sd = WhistleUKF::sanitizeSd(sd);
     tlog(65, "Processing score %2.2f, sd %2.2f from teammate %i", score, sd, i);

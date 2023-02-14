@@ -7,6 +7,9 @@ ENDIF()
 
 SET(BUILD_TYPE "release")
 
+set(CMAKE_CXX_FLAGS "-O3 -march=silvermont")
+set(CMAKE_C_FLAGS "-O3 -march=silvermont")
+
 if(OPTIMIZE)
   ADD_DEFINITIONS(-DOPTIMIZE)
     SET(BUILD_TYPE "optimized")
@@ -80,6 +83,9 @@ SET(LIBCORE ${NAO_HOME}/build/build/${BUILD_TYPE}/core/libcore.a)
 SET(LIBPYTHONSWIG ${NAO_HOME}/build/build/${BUILD_TYPE}/pythonswig/lib_pythonswig_module.so)
 SET(LIBNAO ${NAO_HOME}/build/build/${BUILD_TYPE}/nao/libnaointerface.so)
 
+set(DETECT_LIB_DIR $ENV{NAO_HOME}/lib/detect_lib)
+SET(DETECT_LIB_INCLUDE ${DETECT_LIB_DIR}/include)
+
 
 SET(FFT_INCLUDE ${NAO_HOME}/lib/fft/include)
 SET(LIBFFT ${NAO_HOME}/lib/fft/libfftw3.a)
@@ -127,8 +133,13 @@ SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Werror=return-type")
 SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -lpthread")
 SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -lrt")
 SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -lz")
+# IF(OPTIMIZE)
+  # SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3")
+  # SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=silvermont")
+# ENDIF(OPTIMIZE)
 #SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Werror=overloaded-virtual") #TODO: enable this and remove MemoryBlock::operator=
-INCLUDE_DIRECTORIES(${EIGEN_DIR} ${FLATBUFFERS_INCLUDE} ${YUVIEW_INCLUDE} ${YAML_INCLUDE} ${SRC_DIR} ${NAO_HOME}/build/include)
+INCLUDE_DIRECTORIES(${EIGEN_DIR} ${FLATBUFFERS_INCLUDE} ${YUVIEW_INCLUDE} ${YAML_INCLUDE} ${SRC_DIR} ${NAO_HOME}/build/include
+ ${DETECT_LIB_INCLUDE})
 IF(NOT(TOOL_BUILD))
     INCLUDE_DIRECTORIES(${PYTHON_INCLUDE} ${FFT_INCLUDE} ${NAO_HOME}/naoqi/crosstoolchain/atom/yocto-sdk/sysroots/core2-32/sbr-linux/usr/include)
 ENDIF(NOT(TOOL_BUILD))

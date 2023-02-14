@@ -10,7 +10,7 @@
 
 const float ButtonModule::MAX_CLICK_INTERVAL = 0.35f;
 const float ButtonModule::MIN_CLICK_TIME = 0.01f; // accept anything
-const float ButtonModule::MAX_CLICK_TIME = 0.75f;
+const float ButtonModule::MAX_CLICK_TIME = 3.0f;
 
 #define USE_LAB_BUTTONS
 
@@ -18,7 +18,9 @@ ButtonModule::ButtonModule():
   center_(true),
   left_bumper_(false),
   right_bumper_(false),
-  head_middle_(false)
+  head_middle_(false),
+  head_front_(false),
+  head_rear_(false)
 {
 }
 
@@ -40,6 +42,12 @@ void ButtonModule::specifyMemoryBlocks() {
   getMemoryBlock(camera_, "camera_info");
 }
 
+void ButtonModule::timedReset(ButtonModule::ButtonInfo button)
+{
+  if ((frame_info_->seconds_since_start - button.last) < MAX_CLICK_INTERVAL)
+    button.reset();
+}
+
 void ButtonModule::processButtons() {
   int state = game_state_->state();
 
@@ -47,17 +55,64 @@ void ButtonModule::processButtons() {
   processButton(sensors_->values_[bumperRL], sensors_->values_[bumperRR],right_bumper_);
   processButton(sensors_->values_[bumperLL], sensors_->values_[bumperLR],left_bumper_);
   processButton(sensors_->values_[headMiddle], 0, head_middle_);
+  processButton(sensors_->values_[headFront], 0, head_front_);
+  processButton(sensors_->values_[headRear], 0, head_rear_);
 
-  if (center_.new_result) {
-    processCenterPresses();
-    center_.reset();
-  }
-
-  if (head_middle_.new_result) {
-    camera_->calibrate_white_balance_ = !camera_->calibrate_white_balance_;
-    std::cout << "Head touched" << std::endl;
+  if (head_middle_.new_result && head_front_.new_result && head_rear_.new_result)
+  {
+    std::cout << "All head buttons touched" << std::endl;
+    if (state == UNSTIFF){
+      // For 2022, robot shouldn't leave unstiff unless chest button is pressed
+      // speech_->say("leaving unstiff");
+      // game_state_->setState(INITIAL);
+    }
+    else{
+      game_state_->lastStateChangeFromButton = true;
+      speech_->say("unstiff");
+      game_state_->setState(UNSTIFF);
+    }
+    head_front_.reset();
     head_middle_.reset();
+    head_rear_.reset();
   }
+  // Don't need calibration state for 2022
+  // else if(head_front_.new_result && center_.new_result){
+  //   {
+  //     std::cout << "Entering calibration" << std::endl;
+  //     speech_->say("calibration");
+  //     game_state_->setState(CALIBRATION);
+  //   }
+  //   head_front_.reset();
+  //   head_middle_.reset();
+  //   head_rear_.reset();
+  //   center_.reset();
+  // }
+  // else if(head_rear_.new_result && center_.new_result){
+  //   {
+  //     std::cout << "Entering calibration" << std::endl;
+  //     game_state_->setState(PLAYING);
+  //   }
+  //   head_front_.reset();
+  //   head_middle_.reset();
+  //   head_rear_.reset();
+  //   center_.reset();
+  // }
+  else{
+    if (center_.new_result) {
+      processCenterPresses();
+      center_.reset();
+    }
+  }
+
+  timedReset(head_front_);
+  timedReset(head_middle_);
+  timedReset(head_rear_);
+
+  // else if (head_middle_.new_result) {
+  //   camera_->calibrate_white_balance_ = !camera_->calibrate_white_balance_;
+  //   std::cout << "Head touched" << std::endl;
+  //   head_middle_.reset();
+  // }
 
   if (right_bumper_.new_result) {
     if ((state==INITIAL) || (state == FINISHED)) {
@@ -122,6 +177,8 @@ void ButtonModule::processCenterPresses() {
       game_state_->setState(PENALISED);
     } else if (state==FINISHED) {
       game_state_->setState(INITIAL);
+    } else if (state==UNSTIFF) {
+      game_state_->setState(INITIAL);
     }
   }
 #else
@@ -158,14 +215,17 @@ void ButtonModule::processCenterPresses() {
     std::cout << "State Changed from " << stateNames[state] << " to " << stateNames[game_state_->state()] << std::endl;
 }
   
-void ButtonModule::processButton(float bump1, float bump2, ButtonInfo &button) {
+void ButtonModule::processButton(float bump1, float bump2, ButtonInfo &button,
+                                 float min_duration,
+                                 float max_duration) {
   if ((bump1 > 0.5f) || (bump2 > 0.5f)) {
     if (button.start < 0)
       button.start = frame_info_->seconds_since_start;
     button.last = frame_info_->seconds_since_start;
   } else {
     float dt = frame_info_->seconds_since_start - button.start;
-    if ((dt >= MIN_CLICK_TIME) && (dt <= MAX_CLICK_TIME)) {
+    // if ((dt >= MIN_CLICK_TIME) && (dt <= MAX_CLICK_TIME)) {
+    if ((dt >= min_duration) && (dt <= max_duration)) {
       button.presses++;
     }
     button.start = -1;

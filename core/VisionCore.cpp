@@ -39,6 +39,11 @@
 #include <common/Kicks.h>
 
 #include <iostream>
+#include <chrono>
+#include <boost/thread/barrier.hpp>
+#include <pthread.h>
+
+boost::barrier do_logging_(2); // do_logging tells the logging thread to log the current frame
 
 VisionCore *VisionCore::inst_ = NULL;
 LocalizationMethod::Type LocalizationMethod::DEFAULT = LocalizationMethod::Parallel;
@@ -91,7 +96,9 @@ VisionCore::VisionCore (CoreType type, bool use_shared_memory, int team_num, int
   sync_walk_info_(NULL),
   frames_to_log_(0),
   disable_log_(false),
-  is_logging_(false)
+  is_logging_(false),
+  logging_thread_(std::thread(&VisionCore::log_listener_, this)),
+  log_in_progress_(false)
 {
   init(team_num, player_num);
   initModules(locMethod);
@@ -99,6 +106,19 @@ VisionCore::VisionCore (CoreType type, bool use_shared_memory, int team_num, int
   camtimer_.setInterval(30 * 5);
   atimer_.setInterval(30 * 5);
   auto_wb_flag_ = false;
+
+  pthread_attr_t tattr;
+  int ret = pthread_attr_init (&tattr);
+  int thread_prio = 0;
+  int policy = 0;
+  int min_prio_for_policy = 0, max_prio_for_policy = 0;
+  sched_param param;
+
+  pthread_attr_getschedpolicy(&tattr, &policy);
+  min_prio_for_policy = sched_get_priority_min(policy);
+  max_prio_for_policy = sched_get_priority_max(policy);
+
+  pthread_setschedprio(logging_thread_.native_handle(), min_prio_for_policy);
 }
 
 VisionCore::~VisionCore() {
@@ -143,7 +163,14 @@ void VisionCore::processVisionFrame() {
   vtimer_.start();
   camtimer_.start();
   preVision();
+  optionallyWriteLog();
   interpreter_->processFrame(); // main control is done in the interpreter
+
+  // std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
+  
+  // std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
+  
+  // std::cout << "OptionallyWriteLog elapsed time (ms) = " <<  (std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count()) /1000.0  <<std::endl;
 
   if (communications_ != NULL && interpreter_->is_ok_) {
     communications_->processFrame();
@@ -174,11 +201,11 @@ void VisionCore::processVisionFrame() {
   auto& frame_id = vision_frame_info_->frame_id;
   last_frame_processed_ = frame_id;
 
-  vtimer_.pause();
-  optionallyWriteLog();
+  // vtimer_.pause();
+  // optionallyWriteLog();
   if (communications_ != NULL)
     communications_->optionallyStream();
-  vtimer_.unpause();
+  // vtimer_.unpause();
 
   if(is_logging_ && disable_log_) {
     disable_log_ = false;
@@ -204,14 +231,29 @@ void VisionCore::setLogSelections(const ToolPacket& selections) {
   logging_selections_ = std::make_unique<ToolPacket>(selections);
 }
 
+void VisionCore::log_listener_()
+{
+  while(true)
+  {
+    // cout << "waiting to write log" << endl;
+    do_logging_.wait();
+    // cout << "writing log" << endl;
+    log_in_progress_ = true;
+    logMemory();
+    if(log_by_frame_) frames_to_log_--;
+    if(frames_to_log_ == 0 && log_by_frame_) disable_log_ = true;
+    log_in_progress_ = false;
+  }
+}
+
 void VisionCore::optionallyWriteLog() {
   if(!is_logging_)
     return;
   if ((log_interval_ > 1e-5) && (logtimer_.elapsed_s() < log_interval_)) // not long enough since log
     return;
-  bool headReady = (!robot_vision_->reported_head_moving) && (vision_frame_info_->seconds_since_start - robot_vision_->reported_head_stop_time > HEAD_STOP_THRESHOLD);
-  if ((log_interval_ > 1e-5) && !headReady && (logtimer_.elapsed_s() - log_interval_ < 0.34)) // logging by frequency, but head is moving, so let's wait a bit (at most 0.34s)
-    return;
+  // bool headReady = (!robot_vision_->reported_head_moving) && (vision_frame_info_->seconds_since_start - robot_vision_->reported_head_stop_time > HEAD_STOP_THRESHOLD);
+  // if ((log_interval_ > 1e-5) && !headReady && (logtimer_.elapsed_s() - log_interval_ < 0.34)) // logging by frequency, but head is moving, so let's wait a bit (at most 0.34s)
+  //   return;
   if(logging_selections_ != nullptr && logging_selections_->hasRequiredObjects) {
     bool allow = false;
     for(int i = 0; i < NUM_WorldObjectTypes; i++) {
@@ -223,10 +265,15 @@ void VisionCore::optionallyWriteLog() {
     if(!allow) return;
   }
 
-  logMemory();
+  // cout << "going to log" << endl;
+  if(!log_in_progress_)
+    // cout << "waiting for logging" << endl;
+    do_logging_.wait();
+
+  // logMemory();
   logtimer_.restart();
-  if(log_by_frame_) frames_to_log_--;
-  if(frames_to_log_ == 0 && log_by_frame_) disable_log_ = true;
+  // if(log_by_frame_) frames_to_log_--;
+  // if(frames_to_log_ == 0 && log_by_frame_) disable_log_ = true;
 }
 
 void VisionCore::init(int team_num, int player_num) {
@@ -266,6 +313,7 @@ void VisionCore::init(int team_num, int player_num) {
   initMemory();
 
   robot_state_->team_ = team_num;
+  robot_state_->robot_id_ = rconfig_->robot_id;
   robot_state_->WO_SELF = robot_state_->global_index_ = player_num;
   if(type_ == CORE_TOOLSIM && team_num == TEAM_RED) {
     robot_state_->global_index_ += WO_TEAM_LAST;
@@ -418,7 +466,7 @@ void VisionCore::enableLogging(int frames, double frequency) {
   }
   log_by_frame_ = (frames > 0);
   frames_to_log_ = frames;
-  log_interval_ = frequency;
+  log_interval_ = (frequency > 1e-5) ? frequency : 1.00; // To prevent it from logging too frequently
   enableLogging();
   logtimer_.start();
 }

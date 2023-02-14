@@ -10,12 +10,22 @@ DECLARE_INTERNAL_SCHEMA(struct BehaviorStruct {
   SCHEMA_METHODS(BehaviorStruct);
   SCHEMA_FIELD(float whistleSd);
   SCHEMA_FIELD(float whistleScore);
+  // frame data-type 32 bit because that's what it is in FrameInfoBlock
+  SCHEMA_FIELD(uint32_t whistleHeardFrame = 0);
   SCHEMA_FIELD(uint16_t ballBid = 3000);
   SCHEMA_FIELD(uint16_t ballMissed = 1000);
+  SCHEMA_FIELD(uint16_t waitFrames = 0);
   SCHEMA_FIELD(int16_t targetX = 0);
   SCHEMA_FIELD(int16_t targetY = 0);
   SCHEMA_FIELD(uint8_t state = 1);
   SCHEMA_FIELD(uint8_t role = 2);
+  // Message Types:
+  // 0 : type not set
+  // 1 : we should chase
+  // 2 : heard whistle
+  // 3 : ball flip
+  // 4 : set play info
+  SCHEMA_FIELD(uint8_t msgType = 0);
   SCHEMA_FIELD(uint8_t setPlayType);
   SCHEMA_FIELD(uint8_t setPlayTargetPlayer);
   enum BitIndex {

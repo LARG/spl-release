@@ -69,7 +69,7 @@ protected:
   virtual bool processFrameChild() {return false;} // return true if it's handled execution this frame
   bool isValueValid(float val);
   bool isVoidNum(float val);
-  void processJointCommands(float time, float angles[NUM_JOINTS]);
+  void processJointCommands(float time, float angles[NUM_JOINTS], float stiffness=1.0);
   void processJointHardness(float time,float stiffness[NUM_JOINTS]);
   void startMotionSequence();
   void executeMotionSequence();

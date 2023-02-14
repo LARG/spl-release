@@ -220,63 +220,63 @@ const char* getSensorString(Sensor s);
 
 // joint limits
 const float minJointLimits[NUM_JOINTS] = {
-  DEG_T_RAD * (-110.0 + SIGMA), //(-120.0 + SIGMA), // HeadYaw // Todd:  doc says 120, get an error if we go over 60
-  DEG_T_RAD * (-45.0 + SIGMA), // HeadPitch
+  DEG_T_RAD * (-119.5 + SIGMA), // HeadYaw
+  DEG_T_RAD * (-38.5 + SIGMA), // HeadPitch
 
-	DEG_T_RAD * (-90.0 + SIGMA), // LHipYawPitch
-	DEG_T_RAD * (-25.0 + SIGMA), // LHipRoll
-	DEG_T_RAD * (-100.0 + SIGMA), // LHipPitch
-	DEG_T_RAD * (0.0 + SIGMA), // LKneePitch
-	DEG_T_RAD * (-75.0 + SIGMA), // LAnklePitch
-	DEG_T_RAD * (-45.0 + SIGMA), // LAnkleRoll
+	DEG_T_RAD * (42.44 + SIGMA), // LHipYawPitch
+	DEG_T_RAD * (-21.74 + SIGMA), // LHipRoll
+	DEG_T_RAD * (-88.0 + SIGMA), // LHipPitch
+	DEG_T_RAD * (-5.29 + SIGMA), // LKneePitch
+	DEG_T_RAD * (-68.15 + SIGMA), // LAnklePitch
+	DEG_T_RAD * (-22.79 + SIGMA), // LAnkleRoll
 
-	DEG_T_RAD * (-90.0 + SIGMA), // RHipYawPitch
-	DEG_T_RAD * (-45.0 + SIGMA), // RHipRoll
-	DEG_T_RAD * (-100.0 + SIGMA), // RHipPitch
-	DEG_T_RAD * (0.0 + SIGMA), // RKneePitch
-	DEG_T_RAD * (-75.0 + SIGMA), // RAnklePitch
-	DEG_T_RAD * (-25.0 + SIGMA), // RAnkleRoll
+	DEG_T_RAD * (-65.62 + SIGMA), // RHipYawPitch
+	DEG_T_RAD * (-45.29 + SIGMA), // RHipRoll
+	DEG_T_RAD * (-88 + SIGMA), // RHipPitch
+	DEG_T_RAD * (-5.90 + SIGMA), // RKneePitch
+	DEG_T_RAD * (-67.97 + SIGMA), // RAnklePitch
+	DEG_T_RAD * (-44.06 + SIGMA), // RAnkleRoll
 
-	DEG_T_RAD * (-115.0 + SIGMA), //(-120.0 + SIGMA), // LShoulderPitch
-	DEG_T_RAD * (0.0 + SIGMA), // LShoulderRoll
-	DEG_T_RAD * (-120.0 + SIGMA), // LElbowYaw
-	DEG_T_RAD * (-90.0 + SIGMA), // LElbowRoll
+	DEG_T_RAD * (-119.5 + SIGMA), // LShoulderPitch
+	DEG_T_RAD * (-18.0 + SIGMA), // LShoulderRoll
+	DEG_T_RAD * (-119.5 + SIGMA), // LElbowYaw
+	DEG_T_RAD * (-88.5 + SIGMA), // LElbowRoll
 
 
-	DEG_T_RAD * (-115.0 + SIGMA), //(-120.0 + SIGMA), // seems to be 115 // RShoulderPitch
-	DEG_T_RAD * (-95.0 + SIGMA), // RShoulderRoll
-	DEG_T_RAD * (-120.0 + SIGMA), // RElbowYaw
-	DEG_T_RAD * (0.0 + SIGMA) // RElbowRoll
+	DEG_T_RAD * (-119.5 + SIGMA), // RShoulderPitch
+	DEG_T_RAD * (-76.0 + SIGMA), // RShoulderRoll
+	DEG_T_RAD * (-119.5 + SIGMA), // RElbowYaw
+	DEG_T_RAD * (2.0 + SIGMA) // RElbowRoll
 };
 
 
 const float maxJointLimits[NUM_JOINTS] = {
-	DEG_T_RAD * (110.0 - SIGMA), //(120.0 - SIGMA) // HeadYaw,
-	DEG_T_RAD * (45.0 - SIGMA), // HeadPitch
+	DEG_T_RAD * (119.5 - SIGMA), //(120.0 - SIGMA) // HeadYaw,
+	DEG_T_RAD * (29.5 - SIGMA), // HeadPitch
 
-	DEG_T_RAD * (0.0 - SIGMA), // LHipYawPitch
-	DEG_T_RAD * (45.0 - SIGMA), // LHipRoll
-	DEG_T_RAD * (25.0 - SIGMA), // LHipPitch
-	DEG_T_RAD * (130.0 - SIGMA), // LKneePitch
-	DEG_T_RAD * (45.0 - SIGMA), // LAnklePitch
-	DEG_T_RAD * (25.0 - SIGMA), // LAnkleRoll
+	DEG_T_RAD * (-65.62 - SIGMA), // LHipYawPitch
+	DEG_T_RAD * (45.29 - SIGMA), // LHipRoll
+	DEG_T_RAD * (27.73 - SIGMA), // LHipPitch
+	DEG_T_RAD * (121.04 - SIGMA), // LKneePitch
+	DEG_T_RAD * (52.86 - SIGMA), // LAnklePitch
+	DEG_T_RAD * (44.06 - SIGMA), // LAnkleRoll
 
-	DEG_T_RAD * (0.0 - SIGMA), // RHipYawPitch
-	DEG_T_RAD * (25.0 - SIGMA), // RHipRoll
-	DEG_T_RAD * (25.0 - SIGMA), // RHipPitch
-	DEG_T_RAD * (130.0 - SIGMA), // RKneePitch
-	DEG_T_RAD * (45.0 - SIGMA), // RAnklePitch
-	DEG_T_RAD * (45.0 - SIGMA), // RAnkleRoll
+	DEG_T_RAD * (42.44 - SIGMA), // RHipYawPitch
+	DEG_T_RAD * (21.74 - SIGMA), // RHipRoll
+	DEG_T_RAD * (27.73 - SIGMA), // RHipPitch
+	DEG_T_RAD * (121.47 - SIGMA), // RKneePitch
+	DEG_T_RAD * (53.40 - SIGMA), // RAnklePitch
+	DEG_T_RAD * (22.80 - SIGMA), // RAnkleRoll
 
-	DEG_T_RAD * (115.0 - SIGMA), //(120.0 - SIGMA) // LShoulderPitch
-	DEG_T_RAD * (95.0 - SIGMA), // LShoulderRoll
-	DEG_T_RAD * (120.0 - SIGMA), // LElbowYaw
-	DEG_T_RAD * (0.0 - SIGMA), // LElbowRoll
+	DEG_T_RAD * (119.5 - SIGMA), // LShoulderPitch
+	DEG_T_RAD * (76.0 - SIGMA), // LShoulderRoll
+	DEG_T_RAD * (119.5 - SIGMA), // LElbowYaw
+	DEG_T_RAD * (-2.0 - SIGMA), // LElbowRoll
 
-	DEG_T_RAD * (115.0 - SIGMA), //(120.0 - SIGMA), // RShoulderPitch
-	DEG_T_RAD * (0.0 - SIGMA), // RShoulderRoll
-	DEG_T_RAD * (120.0 - SIGMA), // RElbowYaw
-	DEG_T_RAD * (90.0 - SIGMA) // RElbowRoll
+	DEG_T_RAD * (119.5 - SIGMA), // RShoulderPitch
+	DEG_T_RAD * (18.0 - SIGMA), // RShoulderRoll
+	DEG_T_RAD * (119.5 - SIGMA), // RElbowYaw
+	DEG_T_RAD * (88.5 - SIGMA) // RElbowRoll
 };
 
 // All the body parts that have weight

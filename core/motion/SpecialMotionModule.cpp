@@ -173,12 +173,12 @@ float SpecialMotionModule::getTimeInState() {
 }
 
 //basic function to call joint command
-void SpecialMotionModule::processJointCommands(float time, float angles[NUM_JOINTS]) {
+void SpecialMotionModule::processJointCommands(float time, float angles[NUM_JOINTS], float stiffness) {
   commands_->setSendAllAngles(true,time);
   float maxMove = DEG_T_RAD * 20;
 
   for (int i = 0; i < NUM_JOINTS; i++) {
-    commands_->stiffness_[i] = 1.0; 
+    commands_->stiffness_[i] = stiffness; 
     float delta = angles[i] - storedCommands[i];
     if (fabs(delta) > maxMove) {
       commands_->angles_[i] = storedCommands[i] + delta / fabs(delta) * maxMove;
@@ -292,7 +292,7 @@ void SpecialMotionModule::executeMotionSequence() {
         }
         //std::cout << joint_angles_->values_[i] << " -> " << angles[i] << " (" << storedAngles[i] << ")" << std::endl;
       }
-      processJointCommands(10, angles);
+      processJointCommands(10, angles, motion[curr].stiffness);
       }
       break;
     default:

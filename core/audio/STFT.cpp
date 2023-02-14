@@ -111,7 +111,7 @@ void STFT::processSamples(const int16_t *data, int length, short channels, Spect
         For the v6 it is 250mV/P. But that value seems to be too large.
         Setting with trial and error for now.
       */
-      auto db = std::max(-100.0f, 160.0f * std::log10(amp));
+      auto db = std::max(-100.0f, 250.0f * std::log10(amp));
       output_mag_[i] = db;
     }
     handler(output_mag_.data(), config_.window_size_half());

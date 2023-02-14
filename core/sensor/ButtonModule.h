@@ -57,10 +57,15 @@ class ButtonModule: public Module {
   ButtonInfo left_bumper_;
   ButtonInfo right_bumper_;
   ButtonInfo head_middle_;
+  ButtonInfo head_front_;
+  ButtonInfo head_rear_;
 
  private:
   void processCenterPresses();
-  void processButton(float bump1, float bump2, ButtonInfo &button);
+  void timedReset(ButtonInfo);
+  void processButton(float bump1, float bump2, ButtonInfo &button,
+                     float min_duration = MIN_CLICK_TIME,
+                     float max_duration = MAX_CLICK_TIME);
   void sayIP();
 };
 

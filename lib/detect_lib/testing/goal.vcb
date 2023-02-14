@@ -1,0 +1,6 @@
+HOGExtractor:
+  vocabulary:
+    []
+  WindowSize:
+    width: 16
+    height: 64

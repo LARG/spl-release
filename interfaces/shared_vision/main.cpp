@@ -10,6 +10,7 @@
 #include <memory/Lock.h>
 #include <csignal>
 #include "args/ArgumentParser.h"
+#include <Eigen/Core>
 
 VisionCore *core = NULL;
 
@@ -18,6 +19,10 @@ void handleSignal(int sig);
 
 int main(int argc, char* argv[]) {
   std::cout << "Running Shared Vision\n";
+
+  Eigen::initParallel();
+  Eigen::setNbThreads(2);
+  
   // setup some cleanup functions
   atexit(&handleExit);
   signal(SIGTERM,handleSignal);
