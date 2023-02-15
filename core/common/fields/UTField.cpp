@@ -12,9 +12,11 @@ const float LINE_WIDTH = 50;              // Rules: Item C
 const float PENALTY_MARK_SIZE = 106;      // Rules: Item D
 const float PENALTY_X =  600;             // Rules: Item E
 const float PENALTY_Y = 2200;             // Rules: Item F
-const float PENALTY_MARK_DISTANCE = 1300; // Rules: Item G
-const float CIRCLE_DIAMETER = 1500;       // Rules: Item H
-const float BORDER_STRIP_WIDTH = 300;     // Rules: Item I
+const float OUTER_PENALTY_X =  1650;             // Rules: Item G
+const float OUTER_PENALTY_Y =  4000;             // Rules: Item H
+const float PENALTY_MARK_DISTANCE = 1300; // Rules: Item I
+const float CIRCLE_DIAMETER = 1500;       // Rules: Item J
+const float BORDER_STRIP_WIDTH = 300;     // Rules: Item K
 
 const float GOAL_Y = 1500;                // Rules: Goal inner width (Fig. 2)
 const float GOAL_POST_WIDTH = 110;        // Rules: Post width (Fig. 2)
@@ -92,6 +94,11 @@ const vector<Point2D> intersectionLocation = {
   Point2D( -FIELD_X / 2 + PENALTY_X, -PENALTY_Y / 2), //   WO_OWN_PEN_LEFT_L
   Point2D( -FIELD_X / 2, FIELD_Y / 2),                // 6 WO_OWN_FIELD_RIGHT_L
   Point2D( -FIELD_X / 2, -FIELD_Y / 2),               // 7 WO_OWN_FIELD_LEFT_L
+
+  Point2D( FIELD_X / 2 -  OUTER_PENALTY_X, OUTER_PENALTY_Y / 2),   // 2 WO_OPP_OUTER_PEN_LEFT_L
+  Point2D( FIELD_X / 2 -  OUTER_PENALTY_X, -OUTER_PENALTY_Y / 2),  //   WO_OPP_OUTER_PEN_RIGHT_L
+  Point2D( -FIELD_X / 2 + OUTER_PENALTY_X, OUTER_PENALTY_Y / 2),  // 4 WO_OWN_OUTER_PEN_RIGHT_L
+  Point2D( -FIELD_X / 2 + OUTER_PENALTY_X, -OUTER_PENALTY_Y / 2), //   WO_OWN_OUTER_PEN_LEFT_L
   
   Point2D(-HALF_GRASS_X, HALF_GRASS_Y),               // WO_OWN_FIELD_EDGE_TOP_L
   Point2D(HALF_GRASS_X, HALF_GRASS_Y),               // WO_OPP_FIELD_EDGE_TOP_L
@@ -112,6 +119,11 @@ const vector<Point2D> intersectionLocation = {
   Point2D( -FIELD_X / 2, PENALTY_Y / 2),              // 12 WO_OWN_PEN_RIGHT_T
   Point2D( -FIELD_X / 2, -PENALTY_Y / 2),             // 13 WO_OWN_PEN_LEFT_T
   
+  Point2D( FIELD_X / 2, OUTER_PENALTY_Y / 2),               // 8  WO_OPP_OUTER_PEN_LEFT_T
+  Point2D( FIELD_X / 2, -OUTER_PENALTY_Y / 2),              //    WO_OPP_OUTER_PEN_RIGHT_T
+  Point2D( -FIELD_X / 2, OUTER_PENALTY_Y / 2),              // 12 WO_OWN_OUTER_PEN_RIGHT_T
+  Point2D( -FIELD_X / 2, -OUTER_PENALTY_Y / 2),             // 13 WO_OWN_OUTER_PEN_LEFT_T
+
   Point2D(  HALF_FIELD_X, -HALF_GOAL_Y),              // front right of opp goal
   Point2D(  HALF_FIELD_X,  HALF_GOAL_Y),              // front left of opp goal
 
@@ -129,6 +141,9 @@ const vector<Point2D> lineLocationStarts = {
   intersectionLocation[WO_CENTER_TOP_T      - INTERSECTION_OFFSET],    // WO_CENTER_LINE
   intersectionLocation[WO_OWN_PEN_RIGHT_L   - INTERSECTION_OFFSET],    // WO_OWN_PENALTY
   intersectionLocation[WO_OWN_FIELD_RIGHT_L - INTERSECTION_OFFSET],    // WO_OWN_GOAL_LINE
+  
+  intersectionLocation[WO_OPP_OUTER_PEN_LEFT_L    - INTERSECTION_OFFSET],    // WO_OPP_OUTER_PENALTY
+  intersectionLocation[WO_OWN_OUTER_PEN_RIGHT_L   - INTERSECTION_OFFSET],    // WO_OWN_OUTER_PENALTY
 
   intersectionLocation[WO_OWN_FIELD_EDGE_TOP_L - INTERSECTION_OFFSET],  // WO_OWN_FIELD_EDGE
   intersectionLocation[WO_OPP_FIELD_EDGE_TOP_L - INTERSECTION_OFFSET],  // WO_OPP_FIELD_EDGE
@@ -143,6 +158,11 @@ const vector<Point2D> lineLocationStarts = {
   intersectionLocation[WO_OPP_PEN_RIGHT_L   - INTERSECTION_OFFSET],    // WO_PENALTY_BOTTOM_OPP
   intersectionLocation[WO_OWN_PEN_LEFT_L    - INTERSECTION_OFFSET],    // WO_PENALTY_BOTTOM_OWN
   intersectionLocation[WO_OPP_FIELD_RIGHT_L - INTERSECTION_OFFSET],    // WO_BOTTOM_SIDE_LINE
+
+  intersectionLocation[WO_OPP_OUTER_PEN_LEFT_L    - INTERSECTION_OFFSET],    // WO_OUTER_PENALTY_TOP_OPP
+  intersectionLocation[WO_OWN_OUTER_PEN_RIGHT_L   - INTERSECTION_OFFSET],    // WO_OUTER_PENALTY_TOP_OWN
+  intersectionLocation[WO_OPP_OUTER_PEN_RIGHT_L   - INTERSECTION_OFFSET],    // WO_OUTER_PENALTY_BOTTOM_OPP
+  intersectionLocation[WO_OWN_OUTER_PEN_LEFT_L    - INTERSECTION_OFFSET],    // WO_OUTER_PENALTY_BOTTOM_OWN
 
   intersectionLocation[WO_OWN_FIELD_EDGE_TOP_L - INTERSECTION_OFFSET],    // WO_TOP_FIELD_EDGE
   intersectionLocation[WO_OWN_FIELD_EDGE_BOTTOM_L - INTERSECTION_OFFSET], // WO_BOTTOM_FIELD_EDGE
@@ -162,6 +182,10 @@ const vector<Point2D> lineLocationEnds = {
   intersectionLocation[WO_CENTER_BOTTOM_T   - INTERSECTION_OFFSET],    // WO_CENTER_LINE
   intersectionLocation[WO_OWN_PEN_LEFT_L    - INTERSECTION_OFFSET],    // WO_OWN_PENALTY
   intersectionLocation[WO_OWN_FIELD_LEFT_L  - INTERSECTION_OFFSET],    // WO_OWN_GOAL_LINE
+
+  intersectionLocation[WO_OPP_OUTER_PEN_RIGHT_L   - INTERSECTION_OFFSET],    // WO_OPP_OUTER_PENALTY
+  intersectionLocation[WO_OWN_OUTER_PEN_LEFT_L    - INTERSECTION_OFFSET],    // WO_OWN_OUTER_PENALTY
+
   
   intersectionLocation[WO_OWN_FIELD_EDGE_BOTTOM_L - INTERSECTION_OFFSET], // WO_OWN_FIELD_EDGE
   intersectionLocation[WO_OPP_FIELD_EDGE_BOTTOM_L - INTERSECTION_OFFSET], // WO_OPP_FIELD_EDGE
@@ -176,6 +200,11 @@ const vector<Point2D> lineLocationEnds = {
   intersectionLocation[WO_OPP_PEN_RIGHT_T   - INTERSECTION_OFFSET],    // WO_PENALTY_BOTTOM_OPP
   intersectionLocation[WO_OWN_PEN_LEFT_T    - INTERSECTION_OFFSET],    // WO_PENALTY_BOTTOM_OWN
   intersectionLocation[WO_OWN_FIELD_LEFT_L  - INTERSECTION_OFFSET],    // WO_BOTTOM_SIDE_LINE
+
+  intersectionLocation[WO_OPP_OUTER_PEN_LEFT_T    - INTERSECTION_OFFSET],    // WO_OUTER_PENALTY_TOP_OPP
+  intersectionLocation[WO_OWN_OUTER_PEN_RIGHT_T   - INTERSECTION_OFFSET],    // WO_OUTER_PENALTY_TOP_OWN
+  intersectionLocation[WO_OPP_OUTER_PEN_RIGHT_T   - INTERSECTION_OFFSET],    // WO_OUTER_PENALTY_BOTTOM_OPP
+  intersectionLocation[WO_OWN_OUTER_PEN_LEFT_T    - INTERSECTION_OFFSET],    // WO_OUTER_PENALTY_BOTTOM_OWN
   
   intersectionLocation[WO_OPP_FIELD_EDGE_TOP_L - INTERSECTION_OFFSET],    // WO_TOP_FIELD_EDGE
   intersectionLocation[WO_OPP_FIELD_EDGE_BOTTOM_L - INTERSECTION_OFFSET], // WO_BOTTOM_FIELD_EDGE

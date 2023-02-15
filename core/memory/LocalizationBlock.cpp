@@ -11,6 +11,7 @@ LocalizationBlock::LocalizationBlock() {
     alpha[i] = 0;
   }
   bestAlpha = 0;
+  numModels = 0;
   oppositeModels = false;
   fallenModels = false;
   numMateFlippedBalls = 0;

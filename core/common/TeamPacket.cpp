@@ -1,6 +1,6 @@
 #include <common/TeamPacket.h>
 
-#define PACKETS_MISSED_FACTOR 10
+#define PACKETS_MISSED_FACTOR 1
 
 int TeamPacket::getPacketsMissed(int mate) { 
   return packetsMissed[mate - 1] * PACKETS_MISSED_FACTOR; 

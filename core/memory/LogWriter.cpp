@@ -77,9 +77,18 @@ void LogWriter::writeMemory(const MemoryFrame &memory) {
       if(serializer == nullptr) buffers.emplace_back();
       else buffers.emplace_back(serializer->GetBufferPointer(), serializer->GetSize());
     }
-    StreamBuffer::combine(buffers, main_buffer_);
+    if(buffer_to_disk_)
+    {
+      StreamBuffer disk_buffer;
+      StreamBuffer::combine(buffers, disk_buffer);
+      disk_buffer.write(log_file_);
+      if(mdata_.frames % 100 == 0) mdata_.saveToFile(directory_ + "/metadata.yaml");
+    }
+    else
+      StreamBuffer::combine(buffers, main_buffer_);
     if(!using_buffers_) {
-      write();
+      if(!buffer_to_disk_)
+        write();
       // Write out metadata every 100 frames just in case of a crash
       if(mdata_.frames % 100 == 0) mdata_.saveToFile(directory_ + "/metadata.yaml");
     }

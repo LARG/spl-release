@@ -262,8 +262,8 @@ void NaoCamera::setDefaultSettings() {
   set_uvc_xu(videoDeviceFd, 3, 14, 5, aec);
 
   // Top threshold
-  uint8_t top1[] = {0xFF, 0x3A, 0x0F, 0x00, 0x20};
-  uint8_t top2[] = {0xFF, 0x3A, 0x1B, 0x00, 0x20};
+  uint8_t top1[] = {0xFF, 0x3A, 0x0F, 0x00, 0x40};  // 0x20
+  uint8_t top2[] = {0xFF, 0x3A, 0x1B, 0x00, 0x40};  // 0x20
   set_uvc_xu(videoDeviceFd, 3, 14, 5, top1);
   set_uvc_xu(videoDeviceFd, 3, 14, 5, top2);
   set_uvc_xu(videoDeviceFd, 3, 14, 5, top1);
@@ -273,20 +273,20 @@ void NaoCamera::setDefaultSettings() {
 
 
   // Bottom threshold
-  uint8_t bot1[] = {0xFF, 0x3A, 0x1E, 0x00, 0x18};
-  uint8_t bot2[] = {0xFF, 0x3A, 0x10, 0x00, 0x18};
+  uint8_t bot1[] = {0xFF, 0x3A, 0x1E, 0x00, 0x18};  // 0x28
+  uint8_t bot2[] = {0xFF, 0x3A, 0x10, 0x00, 0x18};  // 0x28
   set_uvc_xu(videoDeviceFd, 3, 14, 5, bot1);
   set_uvc_xu(videoDeviceFd, 3, 14, 5, bot2);
   set_uvc_xu(videoDeviceFd, 3, 14, 5, bot1);
   set_uvc_xu(videoDeviceFd, 3, 14, 5, bot2);
 
 
-
-  // Night mode must be enabled for autoexposure to work properly in dark settings
+  // Disabled in the lab
+  /*// Night mode must be enabled for autoexposure to work properly in dark settings
   uint8_t nightMode[] = {0xFF, 0x3A, 0x00, 0x00, 0x7C};
   set_uvc_xu(videoDeviceFd, 3, 14, 5, nightMode);
   set_uvc_xu(videoDeviceFd, 3, 14, 5, nightMode);
-
+  */
 
   // 4x4 window. Clear the weights for the windows on the top half of the image, so that the autoexposure only uses the bottom half to calculate exposure. 
   uint8_t window0[] = {0xFF, 0x56, 0x88, 0x00, 0x00};

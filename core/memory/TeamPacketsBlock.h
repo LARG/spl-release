@@ -2,7 +2,6 @@
 #define TEAMPACKETSBLOCK_
 
 #include <common/TeamPacket.h>
-#include <common/CoachPacket.h>
 #include <memory/MemoryBlock.h>
 #include <common/WorldObject.h>
 #include <schema/gen/TeamPacketsBlock_generated.h>
@@ -31,8 +30,6 @@ DECLARE_INTERNAL_SCHEMA(struct TeamPacketsBlock : public MemoryBlock {
     }
 
     Point2D altBall(int self, int role, Point2D ball);
-
-    CoachPacket cp;
 
     // Arrays of 6, so we can index from robot ID's 1-5. Index 0 not used.
     SCHEMA_FIELD(std::array<RelayStruct,TEAM_ARRAY_SIZE> relayData);

@@ -22,6 +22,8 @@ extern const float GOAL_X;
 extern const float HALF_GOAL_Y;
 extern const float PENALTY_Y;
 extern const float PENALTY_X;
+extern const float OUTER_PENALTY_Y;
+extern const float OUTER_PENALTY_X;
 extern const float CIRCLE_DIAMETER;
 extern const float CIRCLE_RADIUS;
 extern const float LINE_WIDTH;

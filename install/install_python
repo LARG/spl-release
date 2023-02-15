@@ -134,15 +134,15 @@ remove_tests() {
   rm -rf $module_dir/scipy/tests $module_dir/scipy/*/tests $module_dir/scipy/*/*/tests $module_dir/scipy/*/*/*/tests
 }
 
-# install_python_core_prebuilt
+#install_python_core_prebuilt
 install_python_core_source
-# setup_dependencies
-# install_numpy_prebuilt
-# install_scipy_prebuilt
+#setup_dependencies
 install_numpy_prebuilt
 install_scipy_prebuilt
+#install_numpy_prebuilt
+#install_scipy_prebuilt
 
 # Caffe installs a more recent networkx
 # which causes problems
-pip install networkx==2.0
+#pip install networkx==2.0
 remove_tests

@@ -93,6 +93,19 @@ def setupGccLibs(ip):
     root=True
   )
 
+def setupGPUKernel(ip):
+  runLocalCommand('bash %s/lib/detect_lib/gpu-setup/setup_kernel_robot.sh %s' % (NAO_HOME, ip), password='nao')
+
+def setupGPULibs(ip):
+  runLocalCommand('bash %s/lib/detect_lib/gpu-setup/setup_gpu_libs_robot.sh %s' % (NAO_HOME, ip), password='nao')
+
+def setupSpeak(ip):
+    runRemoteCommand(ip, 'mount -o remount,rw /', root=True)
+    copyFiles(ip, '%s/install/espeak-compiled/lib/*' % NAO_HOME, '/usr/lib', root=True)
+    runRemoteCommand(ip, 'mkdir -p ~/.local/bin', root=False)
+    copyFiles(ip, '%s/install/espeak-compiled/bin/speak' % NAO_HOME, '~/.local/bin/', root=False)
+    copyDirectory(ip, '%s/install/espeak-compiled/espeak-data' % NAO_HOME, '~', root=False)
+
 def setupStartup(ip):
   runRemoteCommand(ip,'mkdir -p ~/.config/systemd/user')
   copyFiles(ip,'../data/scripts/ut_motion.service','.config/systemd/user/')
@@ -102,6 +115,7 @@ def setupStartup(ip):
   runRemoteCommand(ip,'systemctl --user enable ut_vision.service')
 
 def main(options):
+  runRemoteCommand(options.ip,'mount -o remount,rw /', root=True)
   if options.include_ssh:
     setupPasswordlessSSH(options.ip)
   if options.hostname:
@@ -116,11 +130,14 @@ def main(options):
       print 'compiling lib and bins for robot'
       compile()
     runRemoteCommand(options.ip,'mkdir -p lua logs data bin data/mof data/config scripts')
+    setupGPUKernel(options.ip)
+    setupGPULibs(options.ip)
     copyRobot(options.ip, options.id)
     setupProfile(options.ip)
     copyFiles(options.ip,'../data/scripts/autoload.ini','scripts/')
     setupGccLibs(options.ip)
     #setupVim(options.ip)
+    setupSpeak(options.ip)
     setupCaffe(options.ip)
     setupStartup(options.ip)
     print "The robot's server will now reboot to force a cache write."

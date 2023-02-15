@@ -28,7 +28,6 @@ struct Spawns {
     MultiObject,
     InitialState,
     ReadyState,
-    SetState,
     PenalizedState,
     BallFlip,
     Fallen,
@@ -48,6 +47,7 @@ public:
   SCHEMA_FIELD(int kfType);
   SCHEMA_FIELD(int bestModel);
   SCHEMA_FIELD(float bestAlpha);
+  SCHEMA_FIELD(float numModels);
 
   // indicate if there are more with significant likelihood that think we're facing the opposite way
   SCHEMA_FIELD(bool oppositeModels);

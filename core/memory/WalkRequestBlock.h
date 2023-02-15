@@ -120,6 +120,7 @@ DECLARE_INTERNAL_SCHEMA(struct WalkRequestBlock : public MemoryBlock {
     SCHEMA_FIELD(float kick_turn_speed_);
     
     SCHEMA_FIELD(bool is_rotate_);
+    SCHEMA_FIELD(bool localize_after_fallen_);
 });
 
 #endif /* end of include guard: WALKREQUESTBLOCK_RE8SDRLN */

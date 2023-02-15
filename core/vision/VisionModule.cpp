@@ -1,4 +1,5 @@
 #include <vision/VisionModule.h>
+#include <thread>
 #include <common/RobotInfo.h>
 #include <vision/ImageProcessor.h>
 #include <vision/VisionBlocks.h>
@@ -14,6 +15,9 @@
 #include <memory/RobotInfoBlock.h>
 #include <vision/Logging.h>
 #include <common/Util.h>
+#include <common/RobotCalibration.h>
+
+#include <pthread.h>
 
 void VisionModule::specifyMemoryDependency() {
   //last_frame_processed_ = 0;
@@ -72,10 +76,33 @@ void VisionModule::processFrame() {
   }
 
   tlog(30, "Processing bottom camera");
-  bottom_processor_->processFrame();
+  std::thread bottom_thread(&ImageProcessor::processFrame, bottom_processor_);
+  int ret;
+  pthread_attr_t tattr;
+  ret = pthread_attr_init (&tattr);
+  int thread_prio = 0;
+  int policy = 0;
+  int min_prio_for_policy = 0, max_prio_for_policy = 0;
+  sched_param param;
+
+  pthread_attr_getschedpolicy(&tattr, &policy);
+  min_prio_for_policy = sched_get_priority_min(policy);
+  max_prio_for_policy = sched_get_priority_max(policy);
+  // ret = pthread_attr_getschedparam (&tattr, &param);
+  // param.sched_priority--;
+  // pthread_setschedparam(bottom_thread.native_handle(), policy, &param);
+  pthread_setschedprio(bottom_thread.native_handle(), max_prio_for_policy-1);
+  pthread_attr_destroy(&tattr);
 
   tlog(30, "Processing top camera");
-  top_processor_->processFrame();
+  std::thread top_thread(&ImageProcessor::processFrame, top_processor_);
+
+  pthread_setschedprio(top_thread.native_handle(), max_prio_for_policy);
+
+  bottom_thread.join();
+  top_thread.join();
+  tlog(30, "Image processing done");
+  Eigen::setNbThreads(3);
 }
 
 void VisionModule::updateTransforms() {
@@ -97,16 +124,24 @@ int VisionModule::getRobotId() {
 
 void VisionModule::initSpecificModule() {
   loadColorTables();
-  top_processor_ = std::make_unique<ImageProcessor>(*vblocks_, *top_params_, Camera::TOP);
-  bottom_processor_ = std::make_unique<ImageProcessor>(*vblocks_, *bottom_params_, Camera::BOTTOM);
+  top_processor_ = std::make_shared<ImageProcessor>(*vblocks_, *top_params_, Camera::TOP);
+  bottom_processor_ = std::make_shared<ImageProcessor>(*vblocks_, *bottom_params_, Camera::BOTTOM);
   top_processor_->SetColorTable(topColorTable.data());
   bottom_processor_->SetColorTable(bottomColorTable.data());
   top_processor_->init(textlogger);
   bottom_processor_->init(textlogger);
-  if(cache_.robot_state->WO_SELF == WO_TEAM_COACH) {
-    top_params_->defaultHorizontalStepScale = 0;
-    top_params_->defaultVerticalStepScale = 0;
-    tlog(30, "Set coach step scales");
+
+
+  auto calfile = util::ssprintf("%s/calibrations/%02i_calibration.cal", getDataBase(), getRobotId());
+  RobotCalibration cal;
+  bool loaded = cal.loadFromFile(calfile);
+  if(loaded) {
+    printf("Loaded robot calibration: %s\n", calfile.c_str());
+    top_processor_->setCalibration(cal);
+    bottom_processor_->setCalibration(cal);
+  }
+  else {
+    std::cout << "ERROR: No robot calibration found\n";
   }
 }
 

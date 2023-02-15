@@ -15,7 +15,7 @@ add_executable(lola ${SRCS})
 SET(CVDIR $ENV{NAO_HOME}/naoqi/crosstoolchain/atom/yocto-sdk/sysroots/core2-32-sbr-linux/usr/lib)
 # target_link_libraries(lola ${LIBCORE} ${LINK_LIBS} $ENV{NAO_HOME}/lib/msgpack ${CVDIR}/libopencv_core.so ${CVDIR}/libopencv_highgui.so ${CVDIR}/libopencv_imgcodecs.so ${LIBYUVIEW} ${ALSA_LIBRARIES})
 
-TARGET_LINK_LIBRARIES(lola ${LIBCORE} ${LIBNAO} ${ALGLIB} ${LIBRSWALK2014} $ENV{NAO_HOME}/lib/msgpack ${CVDIR}/libopencv_core.so ${CVDIR}/libopencv_highgui.so ${CVDIR}/libopencv_imgcodecs.so ${LIBYUVIEW} ${ALSA_LIBRARIES} ${LIBYAML-CPP} ${LIBFFT} ${LIBFFTW3F} ${LINK_LIBS} -lutil -ldl -lrt -lz)
+TARGET_LINK_LIBRARIES(lola ${LIBCORE} ${LIBNAO} ${ALGLIB} ${LIBRSWALK2014} $ENV{NAO_HOME}/lib/msgpack ${CVDIR}/libopencv_core.so ${CVDIR}/libopencv_highgui.so ${CVDIR}/libopencv_imgcodecs.so ${LIBYUVIEW} ${ALSA_LIBRARIES} ${LIBYAML-CPP} ${LIBFFT} ${LIBFFTW3F} ${LINK_LIBS} -lutil -ldl -lrt -lz -lespeak)
 INCLUDE_DIRECTORIES(${ALSA_INCLUDE_DIRS})
 INCLUDE_DIRECTORIES(${Boost_INCLUDE_DIRS})
 IF(NOT(TOOL_BUILD))

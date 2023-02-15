@@ -64,14 +64,28 @@ flatbuffers::Offset<schema::ImageBlock> ImageBlock::_serialize(serialization::se
     top_alloc = __serializer__->CreateVector(this->img_top_.get(), this->top_params_.rawSize);
     bottom_alloc = __serializer__->CreateVector(this->img_bottom_.get(), this->bottom_params_.rawSize);
   } else {
+    int num_bytes = this->top_params_.width * this->top_params_.height * 2;
+    uint8_t* buf_top = new uint8_t[num_bytes];
+    uint8_t* cur_img_buf = this->img_top_.get();
+    for(int i=0; i<num_bytes; ++i)
+      buf_top[i] = cur_img_buf[i];
+
+    num_bytes = this->bottom_params_.width * this->bottom_params_.height * 2;
+    uint8_t* buf_bottom = new uint8_t[num_bytes];
+    cur_img_buf = this->img_bottom_.get();
+    for(int i=0; i<num_bytes; ++i)
+      buf_bottom[i] = cur_img_buf[i];
+
     auto tfile = yuview::YUVImage::CreateFromRawBuffer(
-      this->img_top_.get(), this->top_params_.width, this->top_params_.height
+      buf_top, this->top_params_.width, this->top_params_.height
     );
     tfile.save(constructPath("top", "yuv"));
     auto bfile = yuview::YUVImage::CreateFromRawBuffer(
-      this->img_bottom_.get(), this->bottom_params_.width, this->bottom_params_.height
+      buf_bottom, this->bottom_params_.width, this->bottom_params_.height
     );
     bfile.save(constructPath("bottom", "yuv"));
+    delete buf_top;
+    delete buf_bottom;
   }
   auto top_params__alloc = this->top_params_.serialize(__serializer__);
   auto bottom_params__alloc = this->bottom_params_.serialize(__serializer__);

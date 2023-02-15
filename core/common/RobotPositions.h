@@ -16,12 +16,12 @@ class RobotPositions {
     static Pose2D* startingSidelinePoses;
     // poses during our kickoff
     static Pose2D* ourKickoffPosesDesired;
-    static Pose2D* ourKickoffPosesManual;
-    static bool*   ourKickoffPosesManualReversible;
     // poses during their kickoff
     static Pose2D* theirKickoffPosesDesired;
-    static Pose2D* theirKickoffPosesManual;
-    static bool*   theirKickoffPosesManualReversible;
+    // poses during our penalty Kick
+    static Pose2D* ourKickoffPosesPenalty;
+    // poses during their penalty kick
+    static Pose2D* theirKickoffPosesPenalty;
 };
 
 #endif /* end of include guard: ROBOTPOSITIONS_H_SBZQRKAM */

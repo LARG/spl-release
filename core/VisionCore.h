@@ -9,6 +9,8 @@
 #include <memory/TextLogger.h>
 #include <math/Vector2.h>
 
+#include<thread>
+
 class CommunicationModule;
 class PerfectLocalizationModule;
 class OppModule;
@@ -136,7 +138,9 @@ private:
   unsigned int frames_to_log_;
   double log_interval_;
   bool log_by_frame_;
-  bool disable_log_, is_logging_;
+  bool disable_log_, is_logging_, log_in_progress_;
+  std::thread logging_thread_; // Thread that calls the log writer after waiting for a signal
+  void log_listener_(); // Function that is called in above thread
   void enableMemoryLogging();
   void disableMemoryLogging();
   void enableLogging();

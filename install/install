@@ -35,15 +35,15 @@ def runSysConfigCommand(command):
 
 NAO_HOME = os.environ['NAO_HOME'] = '/home/' + os.environ['USER'] + '/nao/trunk'
 os.chdir(NAO_HOME + '/install')
-runSysConfigCommand('./install_libs')
-runLocalCommand('sudo rm -rf %s/naoqi' % NAO_HOME, password=PASSWORD)
 runSysConfigCommand('./install_naoqi')
+runSysConfigCommand('./install_libs')
 runSysConfigCommand('./install_python')
 runSysConfigCommand('./install_qt')
 runSysConfigCommand('./install_fft')
 runSysConfigCommand('./install_local_scripts')
-runSysConfigCommand('./install_caffe')
 runSysConfigCommand('./install_lfs')
+runSysConfigCommand('./install_caffe')
+runSysConfigCommand('./install_gpu')
 os.system('echo export NAO_HOME=~/nao/trunk >> ~/.bashrc')
 os.system('echo source $NAO_HOME/install/bashrc_addendum >> ~/.bashrc')
 os.system('cat ssh_configs >> ~/.ssh/config')

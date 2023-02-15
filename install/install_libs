@@ -4,6 +4,10 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source $DIR/common.sh
 #--------------------#
 
+# Newer CMake for detect_lib
+wget https://github.com/Kitware/CMake/releases/download/v3.22.2/cmake-3.22.2-linux-x86_64.tar.gz
+tar -xvf cmake-3.22.2-linux-x86_64.tar.gz
+
 # Add the experimental toolchain
 echo "Begin updates"
 sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
@@ -48,6 +52,11 @@ wget -N $NAO_LIBS/cmake-data_3.5.1-1ubuntu3_all.deb
 sudo dpkg -i cmake-data_*
 wget -N $NAO_LIBS/cmake_3.5.1-1ubuntu3_amd64.deb
 sudo dpkg -i cmake_*
+
+# get files for espeak
+wget -N $NAO_LIBS/espeak.tar.gz
+tar zxvf espeak.tar.gz
+cp espeak-compiled/lib/* $NAO_HOME/naoqi/crosstoolchain/atom/yocto-sdk/sysroots/core2-32-sbr-linux/usr/lib/
 
 # Install libpng
 wget -N $NAO_LIBS/libpng-1.5.23.tar.gz

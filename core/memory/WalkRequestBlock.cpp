@@ -27,9 +27,10 @@ WalkRequestBlock::WalkRequestBlock():
   slow_stand_(false),
   stand_in_place_(false),
   walk_type_(INVALID_WALK),
-  walk_control_status_(WALK_CONTROL_OFF)
+  walk_control_status_(WALK_CONTROL_OFF),
+  localize_after_fallen_(false)
 {
-  header.version = 18;
+  header.version = 19;
   header.size = sizeof(WalkRequestBlock);
 }
 void WalkRequestBlock::set(Motion m, Pose2D speed, bool percentage_speed, bool pedantic) {

@@ -34,6 +34,12 @@ int parseVersion(std::string version) {
   int v = vf * 10;
   return v;
 }
+
+//don't delete this callback function.
+int SynthCallback(short *wav, int numsamples, espeak_EVENT *events)
+{
+    return 0;
+}
  
 /**
  * Constructor for naointerface object
@@ -59,7 +65,17 @@ naointerface::naointerface(boost::asio::io_service& io_service) : frame_handler(
   cleanLock(Lock::getLockName(memory_,LOCK_MOTION));
   motion_lock_ = new Lock(Lock::getLockName(memory_,LOCK_MOTION));
 
-  
+  // test speech 
+  std::cout << "NaoInterface::Creating Text to Speech Proxy\n" << std::flush;
+  if(espeak_Initialize(AUDIO_OUTPUT_PLAYBACK,0,"/home/nao",espeakINITIALIZE_PHONEME_EVENTS) <0)
+  {
+    std::cout << "could not initialize espeak\n" << std::flush;
+  }
+  espeak_SetSynthCallback(SynthCallback);
+  espeak_SetVoiceByName("en");
+ 
+  std::string textBuff = "Initialize\0"; 
+  espeak_Synth(textBuff.c_str(), textBuff.length(),0,POS_CHARACTER,0,espeakCHARS_AUTO,NULL,NULL);
   // setModuleDescription("Interface between the robot and the Austin Villa Code base");
   // start();
 
@@ -108,7 +124,6 @@ void naointerface::start() {
   // }
 
   // try {
-  //   std::cout << "NaoInterface::Creating Text to Speech Proxy\n" << std::flush;
   //   tts_proxy_ = boost::shared_ptr<AL::ALTextToSpeechProxy>(new AL::ALTextToSpeechProxy(getParentBroker()));
   //   tts_proxy_->setVolume(1.0);
   //   std::cout << "DONE" << std::flush << std::endl;
@@ -177,6 +192,10 @@ void naointerface::postProcess() {
     speech_->say_text_ = false;
     if ((frame_info_->frame_id - speech_->last_speech_frame_) > 200){
       speech_->last_speech_frame_ = frame_info_->frame_id;
+      std::string textBuff = std::string(speech_->text_);
+      // oss << speech_->text_ << "\0";
+      // std::string command = oss.str();  // std::to_string("speak \"") + std::to_string(speech_->text_) + std::to_string("\""); 
+      espeak_Synth(textBuff.c_str(), textBuff.length()+1,0,POS_CHARACTER,0,espeakCHARS_AUTO,NULL,NULL);
       // TODO: reenable with lola
       // tts_proxy_->stopAll();
       // tts_proxy_->post.say(speech_->text_);

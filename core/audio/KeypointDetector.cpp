@@ -65,18 +65,28 @@ bool KeypointDetector::detect() {
   //fft_->processSamples(data, length, NChannels);
   //return score_ > threshold();
   spectra_ = fft_->computeSpectra(data, length, NChannels);
-  // std::cout << "Got spectra" << std::endl;
+  // std::cout << "Got spectra with no of rows: "<< spectra_.rows() << std::endl;
   processSpectra(spectra_);
   // std::cout << "processed spectra. Score: " << score_ << " and Threshold: " << threshold() << std::endl << std::endl;
-  if(witer == 0) {
-      remove("whistle.txt");
-      witer++;
+  //////////////////////////////////////
+  // The code in this next block was for debugging
+  // But if running whistle detection while in PLAYING
+  // it causes some interference which crashes Vision
+  // -Ishan
+  /////////////////////////////////////
+  // if(witer == 0) {
+  //     remove("whistle.txt");
+  //     witer++;
+  // }
+  // FILE* fptr = fopen("whistle.txt", "a+");
+  // fprintf(fptr, "%f\n", score_);
+  // fclose(fptr);
+  ////////////////////////////////////
+  if(score_ > threshold()) {
+    std::cout << std::endl << "!!!! WHISTLE DETECTED !!!!" << std::endl;
+    std::cout << score_ << std::endl;
   }
-  FILE* fptr = fopen("whistle.txt", "a+");
-  fprintf(fptr, "%f\n", score_);
-  fclose(fptr);
-  // if(score_ > threshold())
-  //   std::cout << std::endl << "!!!! WHISTLE DETECTED !!!!" << std::endl;
+  
   return score_ > threshold();
 }
 
@@ -94,12 +104,15 @@ void KeypointDetector::processSpectra(const Spectra& spectra) {
     results.emplace_back(config);
     auto& result = results.back();
     result.scores.reserve(spectra.rows());
+    // std::cout << "Config number " << j << std::endl;
     for(int i = 0; i < spectra.rows(); i++) {
       const auto& spectrum = spectra.block(i, 0, 1, spectra.cols());
       auto score = computeKeypointScore(config, spectrum);
+      // std::cout << "\t channel " << i << ": " << score << std::endl;
       result.scores.push_back(score);
       if(i == 0) result.mean = score;
       else
+        // result.mean = std::max(result.mean, score);
         result.mean = (result.mean * i + score) / (i + 1);
     }
     tlog(55, "Config '%s' mean score: %2.2f, count: %i", config.name, result.mean, result.scores.size());
@@ -201,7 +214,16 @@ float KeypointDetector::computeKeypointScore(const Keypoint& kp, const Spectrum&
     kpstats.mean, kpstats.stddev, kpstats.max, kpstats.min
   );
   float mean = kpstats.mean;
-  float z = (kpstats.mean - stats.mean) / stats.stddev;
+  float z = abs(kpstats.mean - stats.mean); // / stats.stddev;
+  if( stats.stddev > 1) z /= stats.stddev;
+  // printf("fstart: [%2.2f]->%i, fend: [%2.2f]->%i \n", kp.fstart, fstart, kp.fend, fend);
+  // printf("kpstats: mean: %2.2f, stddev: %2.2f, max: %2.2f, min: %2.2f \n",
+  //   kpstats.mean, kpstats.stddev, kpstats.max, kpstats.min
+  // );
+  // printf("stats: mean: %2.2f, stddev: %2.2f, max: %2.2f, min: %2.2f \n",
+  //   stats.mean, stats.stddev, stats.max, stats.min
+  // );
+  // std::cout << "mean: "<< mean << "  zmean: " << z << std::endl;
   if(kp.type == Keypoint::Type::Peak) { // Peaks that are higher than expected are ok
     if(mean > kp.db_mean) mean = kp.db_mean;
     if(z > kp.dbz_mean) z = kp.dbz_mean;
@@ -211,10 +233,12 @@ float KeypointDetector::computeKeypointScore(const Keypoint& kp, const Spectrum&
   }
   float mz = (mean - kp.db_mean) / kp.db_stddev;
   float zz = (z - kp.dbz_mean) / kp.dbz_stddev;
+  // std::cout << "Mz: " << mz << " zz: " << zz << std::endl;
 
   static constexpr float base = normal_pdf(0.0f);
   float mscore = normal_pdf(mz) / base;
   float zscore = normal_pdf(zz) / base;
+  // std::cout << "Mscore: " << mscore<< " zscore: " << zscore << std::endl;
   float score = mscore * zscore;
   tlog(42, "base: %2.2f, m: %2.2f, mz: %2.2f, mscore: %2.2f, z: %2.2f, zz: %2.2f, zscore: %2.2f, score: %2.2f",
     base, mean, mz, mscore, z, zz, zscore, score

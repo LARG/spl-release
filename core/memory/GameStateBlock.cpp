@@ -9,6 +9,14 @@ void GameStateBlock::setState(State state) {
   if(whistleElapsedTime() <= 20 && state == SET && state_ == PLAYING) {
     return;
   }
+  // Same as above, but transitioning from PLAYING to READY
+  if(whistleElapsedTime() <= 20 && state == PLAYING && state_ == READY) {
+    return;
+  }
+  // If in UNSTIFF, do not allow any transition except to INITIAL
+  if(state != INITIAL and state_ == UNSTIFF and lastStateChangeFromButton == true) {
+      return;
+  }
 
   // Otherwise proceed normally
   if(state != state_) {
@@ -21,7 +29,7 @@ void GameStateBlock::setState(State state) {
   }
 }
 
-void GameStateBlock::whistleOverride() {
+void GameStateBlock::whistleOverride(State state) {
   whistleTime = time(NULL);
-  setState(PLAYING);
+  setState(state);
 }

@@ -11,6 +11,8 @@
 // #include <alcommon/almodule.h>
 // #include <alaudio/alsoundextractor.h>
 #include <string>
+#include <sstream>
+#include <stdlib.h>
 
 #include <memory/MemoryFrame.h>
 #include <memory/Lock.h>
@@ -31,6 +33,7 @@
 #include "lola_frame.h"
 #include "boost/asio.hpp"
 #include "AudioWrapper.h"
+#include "speak_lib.h"
 
 
 // #include "dcmwrapper.h"

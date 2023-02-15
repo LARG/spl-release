@@ -12,6 +12,9 @@ set(tools "$ENV{NAO_HOME}/naoqi/crosstoolchain/atom/yocto-sdk/sysroots/x86_64-na
 set(CMAKE_C_COMPILER "${tools}/i686-sbr-linux-gcc")
 set(CMAKE_CXX_COMPILER "${tools}/i686-sbr-linux-g++")
 
+set(CMAKE_CXX_FLAGS "-g3")
+set(CMAKE_C_FLAGS "-g3")
+
 set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
 set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
 set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)

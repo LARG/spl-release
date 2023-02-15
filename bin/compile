@@ -9,20 +9,22 @@ import sys, subprocess, os, shutil, glob
 interfaceDeps = {
         'nao':['core', 'pythonswig'],
         'motion':['rswalk2014','nao', 'lola'],
-        'vision':['nao', 'lola'],
+        'vision':['nao', 'lola', 'detect_lib'],
         'memory_test':[],
-        'tool':[],
+        'tool':['detect_lib_tool'],
         'core':[],
         'pythonswig':[],
-        'headless':[],
-        'lola':['rswalk2014'],
-        'rswalk2014':['core']
+        'headless':['detect_lib_tool'],
+        'lola':['rswalk2014', 'nao'],
+        'rswalk2014':['core'],
+        'detect_lib':[],
+        'detect_lib_tool':[],
         }
 validInterfaces = interfaceDeps.keys()
 allInterfaces = validInterfaces[:]
 allInterfaces.remove('headless')
-localInterfaces = ["tool", 'headless']
-robotInterfaces = ['nao','motion','vision']
+localInterfaces = ["tool", 'headless', 'detect_lib_tool']
+robotInterfaces = ['nao','motion','vision', 'core', 'pythonswig', 'lola', 'rswalk2014']
 
 NAO_HOME = os.getenv('NAO_HOME')
 NAO_SOUND = os.getenv('NAO_SOUND') == "true" 
@@ -85,32 +87,62 @@ def compileInterfaces(interfaces,options):
   flags='-j ' + str(getNumProcs())
   if len(interfaces) == 0:
     return
-  for local in localInterfaces:
-    if local in interfaces:
-      interfaces.remove(local)
-      print "COMPILING %s" % local
-      if not compileLocal(local):
-        print "Compile failed for %s" % local
+  for interface in list(interfaces):
+    if interface in localInterfaces:
+      print "COMPILING %s" % interface
+      if not compileLocal(interface):
+        print "Compile failed for %s" % interface
         return False
+      interfaces.remove(interface)
   for interface in interfaces:
     print '-----------------------------------------'
     print 'COMPILING interface: %s' % interface
+    if interface=='detect_lib':
+      compile_detect_lib()
+      continue
     build_dir = os.path.join(options.build_dir,interface)
     os.chdir(build_dir)
     cmd = "make %s" % flags
     print cmd
     sysCall(cmd,'Compile failed')
 
+def compile_detect_lib(tool=False, clean=False):
+  script_dir = os.path.join(NAO_HOME+'/', 'lib/detect_lib')
+  os.chdir(script_dir)
+  build_dir = os.path.join(script_dir,"build")
+  build_script = "build.sh"
+  move_dir = script_dir
+  if tool:
+    build_dir = os.path.join(script_dir,"build_tool")
+    build_script = "build_tool.sh"
+    move_dir = os.path.join(script_dir, "../64")
+  if clean:
+    if os.path.exists(build_dir):
+      subprocess.call("cd %s; bash ../clean.sh" % build_dir, shell=True)
+    lib_path = os.path.join(move_dir, "libdetect_lib.so")
+    print 'REMOVING %s' % lib_path
+    if os.path.exists(lib_path):
+        os.remove(lib_path)
+  else:
+    sysCall('mkdir -p %s' % build_dir, 'Creating build directory failed')
+    sysCall('bash %s' % build_script, 'Compile failed')
+    sysCall('cp %s %s' % (os.path.join(build_dir, "libdetect_lib.so"),
+        move_dir), 'Move failed')
+
 def configureInterfaces(interfaces,flags,options):
   if len(interfaces) == 0:
     return
-  for local in localInterfaces:
-    if local in interfaces:
-      interfaces.remove(local)
-      print "CONFIGURING %s" % local
-      if not configureLocal(local,options):
-        print "Configure failed for %s" % local
+  for interface in list(interfaces):
+    if interface in set(localInterfaces):
+      if interface=='detect_lib_tool':
+        interfaces.remove(interface)
+        continue
+      print 'here'
+      print "CONFIGURING %s" % interface
+      if not configureLocal(interface,options):
+        print "Configure failed for %s" % interface
         return False
+      interfaces.remove(interface)
   if len(interfaces) == 0: return True
   flags += ' -DFORCE_NO_CCACHE=1 '
   if options.textlog:
@@ -118,6 +150,8 @@ def configureInterfaces(interfaces,flags,options):
   if options.optimize:
     flags += " -DOPTIMIZE=true"
   for interface in interfaces:
+    if interface=='detect_lib':
+      continue
     print '-----------------------------------------'
     print 'CONFIGURING interfaces: %s' % ' '.join(interfaces)
     build_dir = os.path.join(options.build_dir, interface)
@@ -150,6 +184,9 @@ def parseArgs(args):
   return options,args
  
 def compileLocal(interface):
+  if interface=='detect_lib_tool':
+      compile_detect_lib(tool=True)
+      return True
   build_dir = os.path.join(options.build_dir,interface)
   sysCall("%s/build/%s/link %s" % (NAO_HOME,interface,options.build_type))
   os.chdir(build_dir)
@@ -168,6 +205,13 @@ def configureLocal(interface,options):
 
 def cleanInterfaces(interfaces,options):
   for interface in interfaces:
+    print 'removing interface', interface
+    if interface=='detect_lib':
+      compile_detect_lib(clean=True)
+      continue
+    elif interface=='detect_lib_tool':
+      compile_detect_lib(tool=True, clean=True)
+      continue
     base = options.build_dir
     path = os.path.join(base,interface)
     print 'REMOVING %s' % path

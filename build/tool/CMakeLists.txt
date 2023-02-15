@@ -120,3 +120,9 @@ FIND_AND_LINK(tool librt.so.1)
 FIND_AND_LINK(tool libfftw3f.so)
 
 TARGET_LINK_LIBRARIES(tool ${QT_LIBRARIES} ${Boost_LIBRARIES} ${FFTW_LIBRARIES} ${PNG_LIBRARIES} ${OPENGL_LIBRARIES} ${GLUT_LIBRARIES} ${OPENCV2_LIBS} core rswalk2014 _pythonswig_module ${LIBFLATBUFFERS}x64 ${LIBYAML-CPP}x64 ${ALGLIB}x64 ${LIBYUVIEW}x64)
+
+# Link the x64 version of detect lib
+TARGET_LINK_LIBRARIES(tool $ENV{NAO_HOME}/lib/64/libdetect_lib.so -lboost_thread)
+# Add RPATH to ensure it can find the detect lib
+set(CMAKE_INSTALL_RPATH "$ORIGIN/../lib/64/")
+set(CMAKE_BUILD_WITH_INSTALL_RPATH TRUE)

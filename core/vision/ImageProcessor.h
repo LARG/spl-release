@@ -15,10 +15,12 @@
 #include <vision/ROIDetector.h>
 #include <vision/PenaltyKeeperImageProcessor.h>
 #include <vision/RobotDetector.h>
+#include <vision/YoloBallDetector.h>
 
 class LineDetector;
 class FieldEdgeDetector;
-class BallDetector;
+//class BallDetector;
+class YoloBallDetector;
 class BlobDetector;
 class RobotDetector;
 class CrossDetector;
@@ -50,7 +52,7 @@ class ImageProcessor {
     std::unique_ptr<LineDetector> line_detector_;
     std::unique_ptr<RamboGoalDetector> rambo_goal_detector_;
     std::unique_ptr<GoalDetector> edge_goal_detector_;
-    std::unique_ptr<BallDetector> ball_detector_;
+    std::unique_ptr<YoloBallDetector> ball_detector_;
     std::unique_ptr<BlobDetector> blob_detector_;
     std::unique_ptr<RobotDetector> robot_detector_;
     std::unique_ptr<CrossDetector> cross_detector_;
