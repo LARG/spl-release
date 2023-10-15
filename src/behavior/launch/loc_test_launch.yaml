@@ -1,0 +1,17 @@
+launch:
+
+- node:
+    pkg: "nao_lola"
+    exec: "nao_lola"
+
+- node:
+    pkg: "vision"
+    exec: "vision_node"
+
+- node:
+    pkg: "localization"
+    exec: "localization_node"
+    param:
+    -
+      name: "publish_lines"
+      value: true

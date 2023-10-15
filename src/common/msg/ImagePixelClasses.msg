@@ -1,0 +1,6 @@
+uint8 IP_FIELD = 0
+uint8 IP_LINE = 1
+uint8 IP_ROBOT = 2
+uint8 IP_BALL = 3
+uint8 IP_BACKGROUND = 4
+uint8 NUM_IP_CLASSES = 5

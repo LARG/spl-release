@@ -1,6 +1,0 @@
----
-channel_offset: 0
-window_size: 128
-window_step: 64
-maximum_samples: 1024
-...

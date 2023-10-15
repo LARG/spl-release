@@ -1,0 +1,141 @@
+{
+    "static_image_top_1": {
+        "stage_type": "StaticImage",
+        "image_filename": "./data/sample_images/top_0002.yuv",
+        "image_width": 1280,
+        "image_height": 960,
+        "color_space": "YUYV",
+        "flip_horizontal": false,
+        "flip_vertical": false,
+        "publish": false,
+        "publish_subsample_major": 5,
+        "publish_subsample_minor": 5
+    },
+    "static_image_bottom_1": {
+        "stage_type": "StaticImage",
+        "image_filename": "./data/sample_images/bottom_0016.yuv",
+        "image_width": 320,
+        "image_height": 240,
+        "color_space": "YUYV",
+        "flip_horizontal": false,
+        "flip_vertical": false
+    },
+    "nao_camera_top": {
+        "stage_type": "CameraCapture",
+        "device_filename": "/dev/video0",
+        "image_width": 1280,
+        "image_height": 960,
+        "color_space": "YUYV",
+        "flip_horizontal": true,
+        "flip_vertical": true,
+        "publish": true,
+        "publish_subsample_major": 5,
+        "publish_subsample_minor": 5,
+        "publish_frame_interval": 10
+    },
+    "nao_camera_bottom": {
+        "stage_type": "CameraCapture",
+        "device_filename": "/dev/video1",
+        "image_width": 640,
+        "image_height": 480,
+        "color_space": "YUYV",
+        "flip_horizontal": false,
+        "flip_vertical": false,
+        "publish": true,
+        "publish_subsample_major": 5,
+        "publish_subsample_minor": 5,
+        "publish_frame_interval": 10
+    },
+    "ball_detector_top": {
+        "stage_type": "TFLiteDetector",
+        "image_source_name": "nao_camera_top",
+        "model_path": "./data/models/nnn7_top_576_v2.tflite",
+        "input_width": 1280,
+        "input_height": 960,
+        "num_output_boxes": 576,
+        "num_classes": 2,
+        "confidence_thresholds": [0.7, 0.7],
+        "threads": 3,
+        "subsample_major": 5,
+        "subsample_minor": 5,
+        "input_channels": 4,
+        "skip_input_channel": 2,
+        "output_scale": false,
+        "enable_gpu": false,
+        "exact_subsample": false
+    },
+    "ball_detector_bottom": {
+        "stage_type": "TFLiteDetector",
+        "image_source_name": "nao_camera_bottom",
+        "model_path": "./data/models/nnn7_top_576_v2.tflite",
+        "input_width": 640,
+        "input_height": 480,
+        "num_output_boxes": 576,
+        "num_classes": 2,
+        "confidence_thresholds": [0.7, 1.0],
+        "threads": 3,
+        "subsample_major": 3,
+        "subsample_minor": 2,
+        "input_channels": 4,
+        "skip_input_channel": 2,
+        "output_scale": false,
+        "enable_gpu": true,
+        "exact_subsample": false
+    },
+    "color_segmenter_top": {
+        "stage_type": "ColorSegmenter",
+        "image_width": 256,
+        "image_height": 192,
+        "color_space": "RGB",
+        "raw_image_source": "nao_camera_top",
+        "color_ranges":{
+            "IP_FIELD": [40, 50, 30, 70, 255, 200],
+            "IP_LINE": [0, 0, 150, 255, 10, 255]
+        },
+        "input_subsample_major": 5,
+        "input_subsample_minor": 5
+    },
+    "line_detector_top": {
+        "stage_type": "HoughLineDetector",
+        "color_segmenter_name": "color_segmenter_top",
+        "image_source_name": "nao_camera_top",
+        "input_subsample_major": 2,
+        "input_subsample_minor": 2,
+        "distance_threshold": 5,
+        "angle_threshold": 0.2,
+        "hough_rho": 2,
+        "hough_theta": 0.017453293,
+        "hough_threshold": 50,
+        "hough_min_line_length": 10,
+        "hough_max_line_gap": 10,
+        "detect_roi": [0.0, 0.1, 1.0, 1.0]
+    },
+    "color_segmenter_bottom": {
+        "stage_type": "ColorSegmenter",
+        "image_width": 160,
+        "image_height": 120,
+        "color_space": "RGB",
+        "raw_image_source": "nao_camera_bottom",
+        "color_ranges":{
+            "IP_FIELD": [40, 50, 30, 70, 255, 200],
+            "IP_LINE": [0, 0, 150, 255, 10, 255]
+        },
+        "input_subsample_major": 2,
+        "input_subsample_minor": 2
+    },
+    "line_detector_bottom": {
+        "stage_type": "HoughLineDetector",
+        "color_segmenter_name": "color_segmenter_bottom",
+        "image_source_name": "nao_camera_bottom",
+        "input_subsample_major": 1,
+        "input_subsample_minor": 1,
+        "distance_threshold": 20,
+        "angle_threshold": 0.2,
+        "hough_rho": 2,
+        "hough_theta": 0.017453293,
+        "hough_threshold": 50,
+        "hough_min_line_length": 10,
+        "hough_max_line_gap": 10,
+        "detect_roi": [0.0, 0.0, 1.0, 1.0]
+    }
+}

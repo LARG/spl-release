@@ -1,9 +1,0 @@
-build
-*/build-sys*
-Makefile
-UTNaoTool.pro
-none
-config.*
-fontconfig
-*.pyc
-gyroZ_calibration.*

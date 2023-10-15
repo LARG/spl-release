@@ -1,0 +1,369 @@
+#!/usr/bin/env python3
+
+"""Script launcher for the UT Austin Villa codebase.
+
+This script is designed to perform multiple useful actions such as installing
+dependencies, building the code, copying to the robot, etc. This allows for
+useful shorthands such as "villa build all" to build the codebase.
+"""
+
+import argparse
+import logging
+import pathlib
+import os
+import subprocess
+import shutil
+import tarfile
+
+# File locations are relative to this script, in case a user wants to have
+# multiple copies of the codebase. Be mindful if moving this script.
+SCRIPT_DIR = pathlib.Path(__file__).parent.resolve() # location of this file
+HOME_DIR = (SCRIPT_DIR/"..").resolve()
+BUILD_DIR = HOME_DIR/"build"
+
+# Specifying a list of valid arguments allows argparse to work better.
+# The valid verbs that can be used with the script (build, install, etc.)
+VERBS = ["install", "build", "clean", "rebuild", "copy", "genimage", "genopn",
+         "setup_robot"]
+# The valid targets for the verbs (e.g., which things to build, install, etc)
+TARGETS = {}
+TARGETS["build"] = ["all",
+                    "robot", "nonrobot",
+                    "nao_lola", "nao_command_msgs", "nao_sensor_msgs",
+                    "common", "vision", "image_source_emulators", "rviz_image_relay",
+                    "localization",
+                    "walk", "walk_msg",
+                    "behavior",
+                    "whistle_detector",
+                    "gc_spl_interfaces", "gc_spl", "robot_comms",
+                    "keyframe_motions",
+                    "keyframe_motion_msg"
+                   ]
+TARGETS["rebuild"] = TARGETS["clean"] = TARGETS["build"]
+TARGETS["install"] = ["all", "naoimage", "rosdep", "bash_setup"]
+TARGET_LIST = list(set().union(*TARGETS.values()))
+
+
+def parse_arguments():
+    """Argument parser"""
+    parser = argparse.ArgumentParser(
+        description="Script launcher for the Austin Villa codebase.")
+    parser.add_argument("verb",
+                        type=str.lower,
+                        choices=VERBS)
+    parser.add_argument("-v", "--verbosity",
+                        type=str.upper,
+                        choices=["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"],
+                        nargs='?',
+                        default="INFO",
+                        const="DEBUG")
+    parser.add_argument("-f", "--force",
+                        action="store_true",
+                        help="Used with clean to suppress confirmation prompt.")
+    parser.add_argument("--cross",
+                        action="store_true",
+                        help="cross compiles for robot")
+    parser.add_argument("--debug",
+                        action="store_true",
+                        help="compiles with debug flags (not optimized)")
+    parser.add_argument("--id",
+                        nargs='+',
+                        type=int,
+                        default=0,
+                        help="Robot id number(s)")
+    parser.add_argument("--ip",
+                        nargs=1,
+                        type=str,
+                        help="Used with copy to specify ip address of robot")
+    parser.add_argument("targets",
+                        type=str.lower,
+                        choices=TARGET_LIST,
+                        nargs='*',
+                        default="all",
+                        help="which targets are affected")
+    args = parser.parse_args()
+    logging.basicConfig(level=getattr(logging, args.verbosity),
+                        format="%(levelname)s: %(message)s")
+    return args
+
+def runcmd(cmd, cwd=SCRIPT_DIR):
+    """Runs command using subprocess.run and logs output"""
+    cproc = subprocess.run(cmd, cwd=cwd, check=True, shell=True, capture_output=True)
+    logging.info("Running cmd: %s", cmd)
+    if cproc.stdout:
+        logging.debug(cproc.stdout.decode("utf-8"))
+    if cproc.stderr:
+        logging.warning(cproc.stderr.decode("utf-8"))
+
+def install_naoimage():
+    """Installs the NaoDevils Ubuntu flasher and necessary related files"""
+    # Nao Image project hosted by Nao Devils
+    nao_image_url = "https://tu-dortmund.sciebo.de/s/8bg5NQJ5Gm1j30z/download"
+    tgz_filepath = SCRIPT_DIR / 'NaoImage.tgz'
+
+    logging.debug("Downloading Nao Image to %s", tgz_filepath)
+    runcmd(f"wget {nao_image_url} -O {tgz_filepath.absolute()}")
+
+    logging.debug("Extracting Nao Image")
+    with tarfile.open(tgz_filepath) as tgz_file:
+        tgz_file.extractall(SCRIPT_DIR / '../tools')
+
+    logging.debug("Deleting %s", tgz_filepath)
+    tgz_filepath.unlink(missing_ok=True)
+
+def install_rosdeps():
+    """Installs dependencies for ros packages via rosdep"""
+    runcmd("rosdep install --from-paths src -y --ignore-src", cwd=SCRIPT_DIR/"..")
+
+def install_bash_setup():
+    """Creates the setup script to setup the terminal profile"""
+    with open(SCRIPT_DIR/"villa_setup.sh", "w", encoding="utf-8") as outfile:
+        outfile.write((
+            "#!/bin/sh\n"
+           f"export NAO_HOME={str(HOME_DIR)}\n"
+            "export PATH=$NAO_HOME/scripts:$PATH\n"
+        ))
+
+def install(targets):
+    """Installs the specified targets
+
+    install is meant to only be called when first installing the codebase.
+    Install targets may require a network connection."""
+    # Resolve aliases
+    if "all" in targets:
+        targets |= {'naoimage', 'rosdep', 'bash_setup'}
+    # Install all targets specified
+    if "naoimage" in targets:
+        install_naoimage()
+    if "rosdep" in targets:
+        install_rosdeps()
+    if "bash_setup" in targets:
+        install_bash_setup()
+
+def colcon_build(pkg_list, cross_compile=False, debug=False):
+    """Builds using colcon
+
+    cross_compile passes in the colcon arguments to cross compile for the robot instead"""
+    env = os.environ.copy()
+    build_dir_suffix = ""
+    cxx_flags = ""
+    cmake_args = ""
+
+    # Add build specific flags
+    if cross_compile:
+        build_dir_suffix = "_cross"
+    if debug:
+        build_dir_suffix += "_debug"
+        cmake_args += "-DCMAKE_BUILD_TYPE=Debug "
+        cxx_flags += "-ggdb -Og "
+    else:
+        cmake_args += "-DCMAKE_BUILD_TYPE=Release "
+        cxx_flags += "-Ofast "
+
+    # Base command
+    cmd = ("colcon "
+          f"--log-base {BUILD_DIR/('log'+build_dir_suffix)} "
+           "build "
+          f"--build-base {BUILD_DIR/('build'+build_dir_suffix)} "
+          f"--install-base {BUILD_DIR/('install'+build_dir_suffix)} ")
+
+    cmd += "--parallel-workers "
+    if "COLCON_PARALLEL_JOBS" in env:
+        cmd += f"{env['COLCON_PARALLEL_JOBS']} "
+    else:
+        cmd += "1 "
+
+    # List packages
+    cmd += "--packages-select "
+    for pkg in pkg_list:
+        cmd += f"{pkg} "
+
+    cmake_args += "-DCMAKE_EXPORT_COMPILE_COMMANDS=1 " # useful for linting cpp files
+
+    if cross_compile:
+        cmd += "--merge-install --cmake-force-configure "
+        cmake_args += f"-DCMAKE_TOOLCHAIN_FILE={SCRIPT_DIR/'cross-config.cmake'} "
+
+    cmake_args += f"-DCMAKE_CXX_FLAGS='{cxx_flags}' "
+    cmd += "--cmake-args " + cmake_args
+
+    env["NAO_HOME"] = str(HOME_DIR) # NAO_HOME is referenced by cross-config.cmake
+    logging.info(cmd)
+    subprocess.run(cmd, cwd=SCRIPT_DIR/"../src", check=True, shell=True,
+                   capture_output=False, env=env)
+
+def rmdir(dirname:pathlib.Path):
+    """Removes directory and all its contents if it exists"""
+    if dirname.is_dir():
+        shutil.rmtree(dirname)
+
+def colcon_clean(pkg_list, cross_compile=False):
+    """Cleans files built by colcon_build"""
+    # File naming should match colcon_build function
+    bdir = BUILD_DIR/("build_cross" if cross_compile else "build")
+    idir = BUILD_DIR/("install_cross" if cross_compile else "install")
+    if "all" in pkg_list:
+        rmdir(bdir)
+        rmdir(idir)
+        return
+    for pkg in pkg_list:
+        rmdir(bdir/pkg)
+        rmdir(idir/pkg)
+
+def build(targets, cross=False, clean_targets=False, build_targets=True,
+          force=False, debug=False):
+    """Builds or cleans targets specified by command line arguments
+
+    setting both build and clean will first clean and then build from scratch
+    cross compile requires the image to be set up
+    """
+    # When modifying this function, note that order matters. Dependencies must
+    # be built first, so they should be listed first.
+
+    # all builds all packages including robot packages and nonrobot packages
+    # robot builds everything that needs to run on the robot itself
+    # nonrobot builds packages that are designed to run on a laptop and are not
+    #     needed on the robot itself
+
+    # Resolve Aliases
+    if "all" in targets:
+        targets |= {"robot"}
+        if not cross:
+            targets |= {"nonrobot"}
+        # don't remove all, since clean all is a special case
+    if "robot" in targets:
+        targets |= {"nao_lola", "nao_command_msgs", "nao_sensor_msgs",
+                    "common", "vision", "image_source_emulators",
+                    "localization",
+                    "walk", "walk_msg",
+                    "behavior",
+                    "whistle_detector",
+                    "gc_spl_interfaces", "gc_spl", "robot_comms","keyframe_motions",
+                    "keyframe_motion_msg"}
+        targets.remove("robot")
+    if "nonrobot" in targets:
+        targets |= {"common", "rviz_image_relay"}
+        targets.remove("nonrobot")
+
+    # Clean the targets
+    if clean_targets:
+        # Confirmation message
+        if (not force and
+            input(f"Clean targets: {' '.join(targets)}? (y/N) ").lower()
+                not in ['y', 'yes']):
+            return
+        # Clean commands
+        colcon_clean(targets, cross)
+
+    # Build the targets
+    if build_targets:
+        if "all" in targets:
+            targets.remove("all")
+        logging.info("Building targets %s", build_targets)
+        colcon_build(targets, cross, debug)
+
+def copyrobot(targets, robot_id, ip_addr=None, clean=False, debug=False):
+    """Copies code to the robot over rsync
+
+    If no ip address is provided, ethernet is assumed"""
+    # Resolve aliases
+    if "all" in targets:
+        targets |= {"code", "configs", "data"}
+
+    if ip_addr is None:
+        ip_addr = "11.0.1." + str(robot_id)
+
+    if isinstance(ip_addr, list):
+        ip_addr = ip_addr[0]
+
+    if clean:
+        logging.info("Removing existing files from robot")
+        runcmd(f"ssh -T nao@{ip_addr} \"rm -rf ~/ros_pkgs ~/configs ~/data\"",
+               cwd=BUILD_DIR)
+
+    install_dir = "install_cross_debug" if debug else "install_cross"
+
+    if "code" in targets:
+        runcmd(f"rsync -avz {install_dir}/* nao@{ip_addr}:~/ros_pkgs/", cwd=BUILD_DIR)
+    if "configs" in targets:
+        runcmd(f"rsync -avz configs nao@{ip_addr}:~/", cwd=HOME_DIR)
+    if "data" in targets:
+        runcmd(f"rsync -avz data nao@{ip_addr}:~/", cwd=HOME_DIR)
+
+def generate_image():
+    """Generates image for flashing"""
+    subprocess.run(("sudo ./generate_image.sh nao-2.8.5.11_ROBOCUP_ONLY_with_root.opn "
+                    "image.ext3 base_packages opencl ros2"),
+                    cwd=SCRIPT_DIR/"../tools/NaoImage", shell=True, check=True)
+
+def configure_netplan(robot_id):
+    """Writes the netplan profile for the robot"""
+    filename = SCRIPT_DIR/f"netplan_config_{robot_id}.yaml"
+    with open(filename, "w", encoding="utf-8") as config_file:
+        config_file.write((
+"network: \n"
+"  version: 2\n"
+"  renderer: networkd\n"
+"  ethernets:\n"
+"    eth0:\n"
+"      optional: true\n"
+"      addresses:\n"
+f"        - 11.0.1.{robot_id}/24\n"
+"      dhcp4: true\n"
+"      dhcp6: true\n"
+"  wifis:\n"
+"    wlan0:\n"
+"#      optional: true\n"
+"      access-points:\n"
+"              \"AustinVillaWifi\":\n"
+"                      password: \"Nao?!Nao?!\"\n"
+"      addresses:\n"
+f"        - 10.0.1.{robot_id}/24\n"
+"      dhcp4: no\n"
+"      dhcp6: no\n"
+"\n"
+            ))
+    subprocess.run((f"sudo mv {filename} "
+                    f"{SCRIPT_DIR/'../tools/NaoImage/root/etc/netplan/default.yaml'}"),
+                   cwd=SCRIPT_DIR, shell=True, check=True)
+
+def generate_opn(robot_id):
+    """Generates opn file for flashing
+
+    This function also configures the network, so it requires rebuilding the image"""
+    if robot_id == 0:
+        logging.error("No robot id provided")
+        return
+    configure_netplan(robot_id)
+    subprocess.run("sudo ./rebuild_image.sh image.ext3",
+                   cwd=SCRIPT_DIR/"../tools/NaoImage", shell=True, check=True)
+    subprocess.run(f"sudo ./generate_opn.sh image.ext3 image_{robot_id}.opn",
+                   cwd=SCRIPT_DIR/"../tools/NaoImage", shell=True, check=True)
+
+
+def main(args):
+    """Executes the appropriate script based on the verb"""
+    targets = set(args.targets) if isinstance(args.targets, list) else {args.targets}
+    if args.verb == "build":
+        build(targets, args.cross, debug=args.debug)
+    elif args.verb == "rebuild":
+        build(targets, args.cross, True, True, args.force, debug=args.debug)
+    elif args.verb == "clean":
+        build(targets, args.cross, True, False, args.force)
+    elif args.verb == "install":
+        install(targets)
+    elif args.verb == "copy":
+        if args.ip is not None and len(args.id) > 1:
+            logging.error("More than one robot id provided")
+            return
+        for robot_id in args.id:
+            copyrobot(targets, robot_id, args.ip,  debug=args.debug)
+    elif args.verb == "genimage":
+        generate_image()
+    elif args.verb == "genopn":
+        for robot_id in args.id:
+            generate_opn(robot_id)
+
+if __name__ == "__main__":
+    ARGS = parse_arguments()
+    raise SystemExit(main(ARGS))

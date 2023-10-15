@@ -1,0 +1,20 @@
+{
+    "stage_type": "TFLiteDetector",
+    "image_source_name": "nao_camera_bottom",
+    "model_path": "./data/models/robocup2023_bot_ball_curdata2.tflite",
+    "input_width": 320,
+    "input_height": 240,
+    "model_input_width": 128,
+    "model_input_height": 96,
+    "num_output_boxes": 384,
+    "num_classes": 1,
+    "confidence_thresholds": [0.7],
+    "threads": 3,
+    "subsample_major": 3,
+    "subsample_minor": 2,
+    "input_channels": 4,
+    "skip_input_channel": 2,
+    "output_scale": false,
+    "enable_gpu": true,
+    "exact_subsample": false
+}

@@ -1,0 +1,13 @@
+launch:
+
+- node:
+    pkg: "rviz2"
+    exec: "rviz2"
+
+- node:
+    pkg: "localization"
+    exec: "field_lines_visualization"
+
+- node:
+    pkg: "rviz_image_relay"
+    exec: "main"

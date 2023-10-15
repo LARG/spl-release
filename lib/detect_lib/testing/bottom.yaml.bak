@@ -1,6 +1,0 @@
-model_path: "/home/nao/data/models/femto.tflite"
-num_output_boxes: 120
-input_width: 128
-input_height: 96
-confidence_threshold: 0.5
-threads: 4
