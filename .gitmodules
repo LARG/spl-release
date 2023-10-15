@@ -1,0 +1,15 @@
+[submodule "src/nao_lola"]
+	path = src/nao_lola
+	url = git@github.com:LARG/nao_lola.git
+[submodule "src/external/nao_interfaces"]
+	path = src/nao_interfaces
+	url = git@github.com:LARG/nao_interfaces.git
+[submodule "lib/tensorflow"]
+	path = lib/tensorflow
+	url = git@github.com:tensorflow/tensorflow.git
+[submodule "src/communication/gc_spl"]
+	path = src/communication/gc_spl
+	url = git@github.com:ros-sports/gc_spl.git
+[submodule "tools/GameController3"]
+	path = tools/GameController3
+	url = git@github.com:RoboCup-SPL/GameController3.git

@@ -1,0 +1,5 @@
+#define TOPIC_VISION_INVOKE "villa/vision/invoke"
+#define TOPIC_VISION_RECONFIGURE "villa/vision/reconfigure"
+#define TOPIC_VISION_DETECTED_OBJECTS "villa/vision/detected_objects"
+#define TOPIC_VISION_DETECTED_LINES "villa/vision/detected_lines"
+#define TOPIC_VISION_PUBLISHED_IMAGES "villa/vision/published_images"

@@ -1,0 +1,40 @@
+launch:
+
+- node:
+    pkg: "nao_lola"
+    exec: "nao_lola"
+
+- node:
+    pkg: "vision"
+    exec: "vision_node"
+
+- node:
+    pkg: "localization"
+    exec: "localization_node"
+
+- node:
+    pkg: "behavior"
+    exec: "soccer"
+
+- node:
+    pkg: "whistle_detector"
+    exec: "whistle_detector"
+
+- node:
+    pkg: "gc_spl"
+    exec: "gc_spl"
+    param:
+    -
+      name: "rcgcd_version"
+      value: 15
+    -
+      name: "rcgcrd_version"
+      value: 4
+
+- node:
+    pkg: "robot_comms"
+    exec: "robot_comms"
+    param:
+    -
+      name: "player_num"
+      value: 5
